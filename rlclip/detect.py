@@ -82,6 +82,47 @@ def match_keywords(texts):
     return found
 
 
+# Text that only shows up on menus, the scoreboard (Tab), the end-of-match awards
+# screen, challenges and the save-replay box. Those screens are full of words like
+# GOALS / SAVES / "2EpicSaves", so a frame containing any of these is never a play.
+MENU_MARKERS = ("SCOREBOARD", "PING", "CHALLENGE", "REWARD", "CLAIM", "WINS:", "DIVISION",
+                "REPLAY", "MVP", "PLAYLIST", "MATCHES", "CANCEL", "TIER")
+_POINTS = re.compile(r"\+\s?\d{2,3}(?!\d)")
+_DIGIT_LOOKALIKES = str.maketrans("01584", "OISBA")
+
+
+def _fold(text):
+    """Uppercase letters/digits only, with OCR look-alikes merged (P0STMATES85 == POSTMATES85)."""
+    return re.sub(r"[^A-Z0-9]", "", text.upper()).translate(_DIGIT_LOOKALIKES)
+
+
+def classify_frame(texts, player_names=()):
+    """Return [(keyword, is_mine)] for real in-game stat popups in one frame's OCR lines.
+
+    A play only counts when the frame shows your stat popup with its points
+    ("EPIC SAVE +75", "GOAL +100") or the goal banner with your name ("POSTMATES85 SCORED!").
+    Goals scored by anyone else are ignored.
+    """
+    if not texts or len(texts) > 12:
+        return []
+    raw = " ".join(texts).upper()
+    if any(marker in raw for marker in MENU_MARKERS):
+        return []
+    folded = _fold(raw)
+    names = [_fold(n) for n in player_names if n]
+    mine = any(n in folded for n in names)
+    scored = "SCORED" in folded
+    points = bool(_POINTS.search(raw))
+    accepted = []
+    for kw in match_keywords(texts):
+        is_goal = "GOAL" in kw and kw != "SHOT ON GOAL"
+        if is_goal and scored and names and not mine:
+            continue  # someone else's goal banner
+        if points or (is_goal and scored and mine):
+            accepted.append((kw, mine))
+    return accepted
+
+
 # ---------------------------------------------------------------- audio
 
 def audio_peaks(path, track, threshold_db, hop=0.05):
@@ -169,7 +210,7 @@ def ocr_events(info, det, progress=True):
     proc = ffmpeg.pipe(["-i", str(info.path), "-an", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "bgr24", "-"])
     engine = _ocr_engine()
     frame_bytes = ow * oh * 3
-    names = [_normalize(n).replace(" ", "") for n in det.get("player_names") or [] if n]
+    names = det.get("player_names") or []
 
     events, last_seen = [], {}
     i = 0
@@ -182,9 +223,7 @@ def ocr_events(info, det, progress=True):
         img = np.frombuffer(buf, dtype=np.uint8).reshape(oh, ow, 3)
         lines = _ocr_lines(engine, img)
         texts = [text for text, conf in lines if conf >= det["ocr_min_confidence"]]
-        frame_text = _normalize(" ".join(texts)).replace(" ", "")
-        mine = any(n in frame_text for n in names)
-        for kw in match_keywords(texts):
+        for kw, mine in classify_frame(texts, names):
             # A popup stays on screen for a few seconds: only count its first appearance.
             if t - last_seen.get(kw, -99) < 4:
                 last_seen[kw] = t

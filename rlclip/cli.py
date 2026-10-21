@@ -58,8 +58,10 @@ def cmd_calibrate(args, cfg):
     print("OCR read:" if lines else "OCR read nothing in the box at that moment.")
     for text, conf in lines:
         print(f"  {text!r:40} conf={conf:.2f}")
-    found = detect.match_keywords([t for t, c in lines if c >= cfg["detection"]["ocr_min_confidence"]])
-    print("Detected: " + (", ".join(found) if found else "nothing"))
+    texts = [t for t, c in lines if c >= cfg["detection"]["ocr_min_confidence"]]
+    found = detect.classify_frame(texts, cfg["detection"]["player_names"])
+    print("Counts as a play: " + (", ".join(kw + (" (yours)" if mine else "") for kw, mine in found)
+                                  if found else "no"))
     return 0
 
 

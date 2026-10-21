@@ -8,6 +8,8 @@ from pathlib import Path
 
 from . import captions, config, detect, ffmpeg, highlights, music, render
 
+# Bump when detection changes enough that old results should be thrown away.
+DETECTION_VERSION = 2
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "score", "start", "end", "anchor", "tone", "caption", "alt_caption",
               "music", "skip"]
@@ -44,12 +46,28 @@ class Project:
         return self._info
 
     # ------------------------------------------------------------ step 1
-    def detect(self, rescan=False):
-        if self.highlights_path.exists() and not rescan:
+    def load_highlights(self):
+        """Saved highlights, or None if missing or made by an older version of the detector."""
+        try:
             with open(self.highlights_path, encoding="utf-8") as f:
                 data = json.load(f)
-            print(f"  using saved detection ({len(data)} highlights) - pass --rescan to redo it")
-            return data
+        except (OSError, ValueError):
+            return None
+        if isinstance(data, dict) and data.get("version") == DETECTION_VERSION:
+            return data["highlights"]
+        return None
+
+    def detect(self, rescan=False):
+        saved = None if rescan else self.load_highlights()
+        if saved is not None:
+            print(f"  using saved detection ({len(saved)} highlights) - pass --rescan to redo it")
+            return saved
+        if self.highlights_path.exists() and not rescan:
+            print("  detection has been improved since this video was scanned - scanning again")
+        # Old clips and captions belong to the old detection; clear them so nothing gets mixed up.
+        for old in ("vertical", "horizontal", "raw", "work"):
+            shutil.rmtree(self.out_dir / old, ignore_errors=True)
+        self.csv_path.unlink(missing_ok=True)
         det = self.cfg["detection"]
         info = self.info
         mins = info.duration / 60
@@ -68,7 +86,7 @@ class Project:
         data = [h.to_dict() for h in found]
         self.out_dir.mkdir(parents=True, exist_ok=True)
         with open(self.highlights_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=1)
+            json.dump({"version": DETECTION_VERSION, "highlights": data}, f, indent=1)
         print(f"  picked {len(data)} highlights")
         return data
 
@@ -115,10 +133,7 @@ class Project:
         library = music.MusicLibrary(cfg)
         if not library.tracks():
             print(f"  ! No music found in {library.root} - clips will only have game audio.")
-        mood_of = {}
-        if self.highlights_path.exists():
-            with open(self.highlights_path, encoding="utf-8") as f:
-                mood_of = {h["index"]: h["mood"] for h in json.load(f)}
+        mood_of = {h["index"]: h["mood"] for h in self.load_highlights() or []}
 
         made = []
         for row in rows:

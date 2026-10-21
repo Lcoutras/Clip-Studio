@@ -14,6 +14,28 @@ def test_keywords_joined_and_fuzzy():
     assert detect.match_keywords(["BOOST", "120"]) == []
 
 
+# Real OCR text from a user's recording (one string per frame).
+REAL_FRAMES = {
+    "own goal popup": ("GOAL +100 POSTMATES85SGD", [("GOAL", True)]),
+    "own aerial goal": ("[ALM] AERIALGOAL +20 POSTMATES85SC0RED!", [("AERIAL GOAL", True)]),
+    "hat trick": ("HATTRICK +25 YOU SCOREDBY PASSENGERPRINCESS [ALM]postmates85", [("HAT TRICK", True)]),
+    "opponent goal banner": ("e! e! 2000800 AYYR0N7321SC0RED! GOAL!", []),
+    "scoreboard": ("SCOREBOARD R1 ALMOST SCORE GOALS ASSISTS SAVES SHOTS PING 210 PASSENGERPRINCESS "
+                   "[ALM]postmates85 736 4 132", []),
+    "awards screen": ("FEARLESSWARFARE PASSENGERPRINCESS [ALM]postmates85 GUARDIANANGEL 2EpicSaves "
+                      "S24WINS:57 [ALM]fearlesswarfare EXECUTIONER 2Demolitions 1OvertimeGoal FINISHER", []),
+    "challenges menu": ("ROCKEE WEEKLY CH Get 3 Assists in READYTO Win 5 Online Ma Play5Matches VIEW", []),
+    "save replay box": ("currenttime. RAZFER TENIKTARASSE OVERLORX SAVEREPLAY Enter a name for "
+                        "yourreplay [optionall: OK CANCEL", []),
+    "loading tip": ("vewhenthegame currenttime. SAVEBYTHE BALL PLAYER ZERO", []),
+}
+
+
+def test_real_frames_only_count_own_popups():
+    for name, (text, expected) in REAL_FRAMES.items():
+        assert detect.classify_frame(text.split(" "), ["postmates85"]) == expected, name
+
+
 def test_highlights_merge_and_rank():
     det = config.load()["detection"]
     ocr = [
@@ -24,7 +46,7 @@ def test_highlights_merge_and_rank():
     peaks = [(102.7, 18.0), (500.0, 22.0)]
     found = highlights.build(ocr, peaks, [], det, duration=600)
     labels = [h.label for h in found]
-    assert labels == ["EPIC SAVE", "HYPE"]          # lone ASSIST is below min_score
+    assert labels == ["EPIC SAVE"]   # lone ASSIST is below min_score, audio alone isn't a clip
     save = found[0]
     assert save.anchor == 102.7                      # snapped to the audio hit
     assert save.start == round(102.7 - det["pre_seconds"], 2)

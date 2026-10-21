@@ -38,12 +38,14 @@ def build(ocr_events, peaks, markers, det, duration):
         e.weight += min(2.0, max(0.0, (jump_db - 6) / 4))
         events.append(e)
 
-    # Loud moments with no popup (crowd roar, a crazy flick) count as low-weight "HYPE".
-    covered = [e.time for e in events]
-    for t, jump_db in peaks:
-        if all(abs(t - c) > 4 for c in covered):
-            weight = min(6.0, 2 + (jump_db - det["audio_peak_db"]) / 2)
-            events.append(Event(t, "HYPE", weight, "hype", "audio", f"+{jump_db:.0f}dB"))
+    # Loud moments with no popup are off by default: with voices in the audio, yelling
+    # looks exactly like a goal explosion.
+    if det.get("audio_only_clips"):
+        covered = [e.time for e in events]
+        for t, jump_db in peaks:
+            if all(abs(t - c) > 4 for c in covered):
+                weight = min(6.0, 2 + (jump_db - det["audio_peak_db"]) / 2)
+                events.append(Event(t, "HYPE", weight, "hype", "audio", f"+{jump_db:.0f}dB"))
     events += markers
     events.sort(key=lambda e: e.time)
 
@@ -58,8 +60,9 @@ def build(ocr_events, peaks, markers, det, duration):
     highlights = []
     for group in clusters:
         best = max(group, key=lambda e: e.weight)
-        rest = sum(e.weight for e in group) - best.weight
-        score = round(best.weight + 0.3 * rest, 2)
+        # Extra popups in the same play (GOAL then HAT TRICK) add a little; repeats of one don't.
+        others = {e.label: e.weight for e in group if e.label != best.label}
+        score = round(best.weight + 0.3 * sum(others.values()), 2)
         # Only the moments that matter set the window; a stray audio blip shouldn't add 8s of lead-in.
         span = [e for e in group if e.weight >= best.weight * 0.5]
         start = min(e.time for e in span) - det["pre_seconds"]
@@ -72,9 +75,13 @@ def build(ocr_events, peaks, markers, det, duration):
         highlights.append(Highlight(0, round(start, 2), round(end, 2), round(best.time, 2),
                                     best.label, score, best.mood, group))
 
-    picked = [h for h in highlights if h.score >= det["min_score"]]
-    picked.sort(key=lambda h: h.score, reverse=True)
-    picked = picked[: det["max_clips_per_video"]]
+    picked = []
+    for h in sorted(highlights, key=lambda h: h.score, reverse=True):
+        if h.score < det["min_score"] or len(picked) >= det["max_clips_per_video"]:
+            continue
+        if any(h.start < p.end and p.start < h.end for p in picked):
+            continue  # overlaps a better clip
+        picked.append(h)
     picked.sort(key=lambda h: h.start)
     for i, h in enumerate(picked, 1):
         h.index = i
