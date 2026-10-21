@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+output/
+music/**/*.mp3
+music/**/*.wav
+music/**/*.m4a
+music/**/*.aac
+music/**/*.ogg
+music/**/*.flac
+music/**/*.opus
+music/.drops.json
+fonts/*.ttf
+fonts/*.otf
+*_calibrate.png

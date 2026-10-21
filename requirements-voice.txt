@@ -1,0 +1,4 @@
+# Optional: AI vocal separation, only needed for recordings where your voice is
+# mixed into the game audio. Large download (PyTorch).
+demucs>=4.0.1
+soundfile>=0.12

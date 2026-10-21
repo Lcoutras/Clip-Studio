@@ -1,0 +1,150 @@
+# Caption library. Add, remove or rewrite lines freely.
+# The tool looks for the clip's exact label first (e.g. "AERIAL GOAL"), then its
+# family (GOAL / SAVE / DEMO), then ANY. Each section has funny and motivational lines.
+
+AERIAL GOAL:
+  funny:
+    - Gravity is more of a suggestion
+    - Air traffic control is filing a complaint
+    - "Frequent flyer miles: unlocked"
+    - My car has a pilot's license now
+    - Boeing wants to know my location
+    - The ceiling was the limit. I ignored it.
+  motivational:
+    - Rise above the noise
+    - Hours in free play for this one second
+    - If they won't meet you on the ground, take it to the sky
+    - Aim higher. Literally.
+
+BICYCLE GOAL:
+  funny:
+    - Didn't even need training wheels
+    - Lance Armstrong could never
+    - I learned this from a YouTube tutorial at 3am
+  motivational:
+    - Do the thing they say you can't
+    - Style is earned, not given
+
+TURTLE GOAL:
+  funny:
+    - Slow and steady? Never heard of her
+    - Upside down and still better than you
+    - Shell yeah
+  motivational:
+    - Even upside down, keep moving forward
+
+BACKWARDS GOAL:
+  funny:
+    - Didn't even look
+    - Reverse card
+    - It's called vision. You wouldn't understand.
+
+OVERTIME GOAL:
+  funny:
+    - Sorry, I had dinner waiting
+    - Golden goal. Golden me.
+  motivational:
+    - Clutch is a choice
+    - Pressure makes diamonds
+    - When it matters most, show up
+
+HAT TRICK:
+  funny:
+    - Three goals, zero chill
+    - Someone pass the hats
+  motivational:
+    - Once is luck. Three times is work.
+
+GOAL:
+  funny:
+    - Keeper went to get a snack
+    - Sent that one to the shadow realm
+    - Physics said no. I said yes.
+    - That ball owed me money
+    - Calculated. (It was not calculated.)
+    - Ball's in the net, opponent's in the group chat complaining
+    - Goalie had a better view than anybody
+    - Somebody check on the defense
+    - I'd like to thank my mom and my 120fps
+    - Main character energy
+    - Netflix? No. Net-fix.
+  motivational:
+    - Shoot your shot. Every time.
+    - Practice in private, shine in public
+    - Consistency beats talent
+    - Small touches, big results
+    - Every rank was earned
+    - Stay patient. The opening always comes.
+
+SAVE:
+  funny:
+    - Not in my house
+    - Return to sender
+    - Denied. Please try again later.
+    - My net, my rules
+    - Absolutely not, sir
+    - Goalkeeper? I prefer goal-owner.
+    - Your shot has been declined
+    - I've seen scarier shots in Rookie
+    - The wall has entered the chat
+  motivational:
+    - Defense wins championships
+    - Never give up on the play
+    - Stay calm, stay ready
+    - Read it before they hit it
+    - Doubt is louder than they are. Ignore both.
+
+EPIC SAVE:
+  funny:
+    - Reflexes powered by energy drinks
+    - Bro thought he had me
+    - Sorry, the net is closed for renovations
+    - Called it. (I didn't.)
+  motivational:
+    - Heroes are made in the last second
+    - Rotate back. It pays off.
+    - The difference between losing and winning is one touch
+
+DEMO:
+  funny:
+    - Insurance won't cover that
+    - Parking violation
+    - Bumped into a friend
+    - Your car has been recalled
+    - Get out of my lane
+    - Sorry, didn't see you there (I did)
+    - "Uber rating: 1 star"
+  motivational:
+    - Make space. Make plays.
+    - Control the field
+
+EXTERMINATION:
+  funny:
+    - Pest control has arrived
+    - Seven demos. No regrets.
+  motivational:
+    - Relentless
+
+HYPE:
+  funny:
+    - My hands did that without me
+    - Did you see that? No? Good, me neither
+    - The replay doesn't lie
+    - Certified clip moment
+  motivational:
+    - Trust your touch
+    - Keep grinding. It shows.
+
+ANY:
+  funny:
+    - Rocket League physics, everybody
+    - What a save! What a save! What a save!
+    - My teammates were spectating
+    - "Champ 1 by day, Diamond 2 by night"
+    - Plat lobby energy
+    - Mechanics? I just press buttons
+  motivational:
+    - One more game
+    - Every match makes you better
+    - Play for the love of it
+    - Grind now, flex later

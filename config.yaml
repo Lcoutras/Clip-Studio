@@ -1,0 +1,54 @@
+# Rocket League Clipper settings. Anything you delete falls back to the default.
+
+output_dir: output            # finished clips go in output/<video name>/
+
+detection:
+  ocr_fps: 1                  # frames per second checked for popups (0.5 = twice as fast, may miss some)
+  ocr_region: [0.15, 0.1, 0.85, 0.9]   # part of the screen scanned (left, top, right, bottom as fractions)
+  audio_peak_db: 10           # how much louder than normal a moment must be to count as "hype"
+  min_score: 5                # raise to keep only the best plays, lower to get more clips
+  max_clips_per_video: 15
+  pre_seconds: 8              # seconds kept before the play
+  post_seconds: 3             # seconds kept after the play (before the replay starts)
+  merge_gap: 6                # events closer than this become one clip
+  max_clip_seconds: 25
+  player_names: []            # your in-game name(s), e.g. ["LukeRL"]; your goals rank higher
+
+audio:
+  # auto  = use the game-only track if the video has 2+ audio tracks, otherwise
+  #         remove voices with AI (needs setup-voice-removal.bat), otherwise music only
+  # track = always use the game-only track      demucs = always use AI voice removal
+  # mute  = no game audio, music only            keep   = keep the audio as recorded
+  voice_removal: auto
+  game_track: 0               # which audio track is game-only (0 = first track)
+  game_volume: 0.35           # game sound under the music
+  game_volume_on_play: 1.0    # game sound right at the play (goal explosion hits)
+
+music:
+  dir: music
+  volume: 0.9
+  fade_out: 1.0
+
+captions:
+  # auto = Claude writes captions if ANTHROPIC_API_KEY is set, otherwise the library
+  # ai / library = force one or the other
+  source: auto
+  funny_ratio: 0.6            # share of funny vs motivational captions
+  model: claude-opus-5-5
+  library: captions/library.yaml
+  font: auto                  # or a path to a .ttf; any font dropped in fonts/ is used first
+  show_event_label: true      # big yellow "EPIC SAVE!" stamp at the moment of the play
+  watermark: ""               # e.g. "@yourhandle"
+
+render:
+  format: vertical            # vertical | horizontal | both
+  vertical_style: blur        # blur = full gameplay over a blurred background, crop = zoomed fill
+  vertical_fg_aspect: 1.3333  # width/height of the gameplay strip in blur mode
+  slowmo: true
+  slowmo_speed: 0.5
+  slowmo_seconds: 1.2         # length of gameplay slowed down, leading into the moment
+  zoom_punch: true
+  fps: 60
+  encoder: libx264            # h264_nvenc for NVIDIA GPUs (much faster), h264_amf for AMD
+  crf: 20                     # quality: lower = better and bigger
+  keep_raw_clip: true         # also save the unedited play (voices removed) in raw/
