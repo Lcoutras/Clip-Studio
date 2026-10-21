@@ -202,7 +202,7 @@ def _scan_geometry(info, region, width):
     return cw, ch, cx, cy, ow, oh
 
 
-def ocr_events(info, det, progress=True):
+def ocr_events(info, det, progress=True, on_progress=None):
     """Scan the whole recording for stat-feed popups."""
     fps = det["ocr_fps"]
     cw, ch, cx, cy, ow, oh = _scan_geometry(info, det["ocr_region"], det["ocr_width"])
@@ -233,6 +233,8 @@ def ocr_events(info, det, progress=True):
             if mine and "GOAL" in kw:
                 weight += 2
             events.append(Event(max(0.0, t - det["ocr_delay"]), label, weight, mood, "ocr", " ".join(texts)))
+        if on_progress and i % max(1, int(10 * fps)) == 0:
+            on_progress(min(100.0, 100 * t / info.duration), len(events))
         if progress and i % int(60 * fps) == 0:
             pct = min(100, 100 * t / info.duration)
             sys.stdout.write(f"\r  scanning video... {pct:5.1f}%  ({len(events)} events)")

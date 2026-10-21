@@ -57,7 +57,7 @@ class Project:
             return data["highlights"]
         return None
 
-    def detect(self, rescan=False):
+    def detect(self, rescan=False, on_progress=None):
         saved = None if rescan else self.load_highlights()
         if saved is not None:
             print(f"  using saved detection ({len(saved)} highlights) - pass --rescan to redo it")
@@ -65,7 +65,7 @@ class Project:
         if self.highlights_path.exists() and not rescan:
             print("  detection has been improved since this video was scanned - scanning again")
         # Old clips and captions belong to the old detection; clear them so nothing gets mixed up.
-        for old in ("vertical", "horizontal", "raw", "work"):
+        for old in ("vertical", "horizontal", "raw", "work", "previews"):
             shutil.rmtree(self.out_dir / old, ignore_errors=True)
         self.csv_path.unlink(missing_ok=True)
         det = self.cfg["detection"]
@@ -76,7 +76,7 @@ class Project:
         track = self.cfg["audio"]["game_track"] if info.audio_tracks > 1 else 0
         peaks = detect.audio_peaks(self.video, track, det["audio_peak_db"]) if info.audio_tracks else []
         print(f"  audio: {len(peaks)} loud moments")
-        ocr = detect.ocr_events(info, det)
+        ocr = detect.ocr_events(info, det, on_progress=on_progress)
         markers = []
         marker_file = self.video.with_suffix(".markers.txt")
         if marker_file.exists():
@@ -115,19 +115,50 @@ class Project:
             rows.append(row)
         picker.save_state()
         self.out_dir.mkdir(parents=True, exist_ok=True)
-        # utf-8-sig so Excel opens it with the right encoding.
-        with open(self.csv_path, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-            writer.writeheader()
-            writer.writerows(rows)
+        self.write_rows(rows)
         return rows
 
     def read_rows(self):
         with open(self.csv_path, newline="", encoding="utf-8-sig") as f:
             return list(csv.DictReader(f))
 
+    def write_rows(self, rows):
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        # utf-8-sig so Excel opens it with the right encoding.
+        with open(self.csv_path, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def preview_path(self, clip):
+        return self.out_dir / "previews" / f"{int(clip):02d}.mp4"
+
+    def make_previews(self, buffer=10.0, create=True):
+        """Small 540p previews of each play with extra footage on both sides, for trimming.
+
+        Returns {clip number: preview start time in the recording}.
+        """
+        found = self.load_highlights() or []
+        windows = {}
+        for h in found:
+            start = max(0.0, h["start"] - buffer)
+            end = min(self.info.duration, h["end"] + buffer)
+            windows[h["index"]] = start
+            out = self.preview_path(h["index"])
+            if out.exists() or not create:
+                continue
+            out.parent.mkdir(parents=True, exist_ok=True)
+            ffmpeg.run(["-ss", f"{start:.3f}", "-i", self.video, "-t", f"{end - start:.3f}",
+                        "-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale=-2:540",
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "27",
+                        "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", out])
+        return windows
+
     # ------------------------------------------------------------ step 3
-    def render_all(self, rows, formats):
+    def output_name(self, row):
+        return f"{self.video.stem}_{int(row['clip']):02d}_{_slug(row['label'])}"
+
+    def render_all(self, rows, formats, on_clip=None):
         cfg = self.cfg
         mode = render.voice_mode(cfg, self.info)
         library = music.MusicLibrary(cfg)
@@ -142,7 +173,9 @@ class Project:
             idx = int(row["clip"])
             start, end, anchor = float(row["start"]), float(row["end"]), float(row["anchor"])
             work = _workdir(self.out_dir, row)
-            name = f"{self.video.stem}_{idx:02d}_{_slug(row['label'])}"
+            name = self.output_name(row)
+            if on_clip:
+                on_clip(row)
             print(f"  [{idx:02d}] {row['label']} ({end - start:.0f}s): \"{row['caption']}\"")
             video, game = render.extract(self.info, start, end, work, mode, cfg["audio"]["game_track"])
 

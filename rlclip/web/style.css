@@ -1,0 +1,136 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1f232c;
+  --line: #2a2f3a;
+  --text: #e8eaf0;
+  --muted: #8b93a5;
+  --accent: #3d8bff;
+  --accent-text: #ffffff;
+  --play: #ffd400;
+  --keep: #2fbf71;
+  --discard: #e5484d;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+input, select, textarea {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  width: 100%;
+}
+textarea { resize: vertical; }
+.muted { color: var(--muted); }
+
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; font-size: 16px; white-space: nowrap; }
+.folder { display: flex; gap: 8px; flex: 1; max-width: 760px; }
+
+.layout { display: flex; height: calc(100% - 55px); }
+.sidebar {
+  width: 290px; flex: none; background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sidebar h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 16px 6px; }
+.videos { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; flex: 1; }
+.videos li {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 10px; border-radius: 8px; cursor: pointer;
+}
+.videos li:hover { background: var(--panel-2); }
+.videos li.active { background: var(--panel-2); outline: 1px solid var(--accent); }
+.videos .name { font-weight: 600; word-break: break-all; }
+.videos .status { font-size: 12px; color: var(--muted); }
+.videos button { padding: 4px 10px; font-size: 12px; flex: none; }
+
+.jobs { border-top: 1px solid var(--line); padding: 10px 14px; max-height: 40%; overflow-y: auto; }
+.job { margin-bottom: 10px; font-size: 12px; }
+.job .bar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.job .fill { height: 100%; background: var(--accent); transition: width .4s; }
+.job.error { color: var(--discard); }
+
+.main { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.empty { max-width: 560px; margin: 12vh auto; text-align: center; color: var(--muted); }
+.empty h1 { color: var(--text); }
+.toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.toolbar h1 { margin: 0; font-size: 20px; word-break: break-all; }
+.toolbar-actions { display: flex; gap: 10px; align-items: center; }
+.segmented { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.segmented button { border: 0; border-radius: 0; background: transparent; }
+.segmented button.active { background: var(--panel-2); color: var(--accent); }
+
+.clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+}
+.card.discarded { opacity: .45; }
+.card-head { display: flex; justify-content: space-between; align-items: center; }
+.card-head .num { color: var(--muted); }
+.card-head .label { font-weight: 700; }
+.badges { display: flex; gap: 6px; font-size: 12px; color: var(--muted); }
+.badges span { background: var(--panel-2); padding: 2px 8px; border-radius: 99px; }
+
+.player { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 9; }
+.player video { width: 100%; height: 100%; display: block; }
+.player .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+
+.track { position: relative; height: 28px; background: var(--panel-2); border-radius: 6px; cursor: pointer; touch-action: none; }
+.range { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 35%, transparent); border: 2px solid var(--accent); border-radius: 6px; }
+.anchor { position: absolute; top: -3px; bottom: -3px; width: 3px; background: var(--play); border-radius: 2px; pointer-events: none; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); pointer-events: none; }
+.handle {
+  position: absolute; top: -4px; bottom: -4px; width: 14px; margin-left: -7px;
+  background: var(--accent); border-radius: 4px; cursor: ew-resize;
+}
+.trim-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
+.trim-row.small button { font-size: 12px; padding: 4px 10px; }
+.trim-row .hint { font-size: 12px; text-align: center; }
+.nudge { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.nudge button { padding: 2px 9px; }
+
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.caption-row { display: flex; gap: 6px; }
+.caption-row textarea { color: var(--text); font-size: 14px; }
+.caption-row button { flex: none; font-size: 18px; padding: 0 10px; }
+
+.card-actions { display: flex; gap: 8px; }
+.card-actions button { flex: 1; }
+.keep.is-kept { border-color: var(--keep); color: var(--keep); }
+.keep.is-discarded { border-color: var(--discard); color: var(--discard); }
+
+.modal { position: fixed; inset: 0; background: rgb(0 0 0 / .75); display: grid; place-items: center; z-index: 10; }
+.modal[hidden] { display: none; }
+.modal-box { position: relative; background: var(--panel); padding: 16px; border-radius: var(--radius); max-height: 94vh; }
+.modal-box video { max-height: 82vh; max-width: 90vw; display: block; border-radius: 8px; }
+.modal-close { position: absolute; top: -14px; right: -14px; border-radius: 50%; width: 32px; height: 32px; padding: 0; font-size: 18px; }
+
+@media (max-width: 800px) {
+  .layout { flex-direction: column; height: auto; }
+  .sidebar { width: 100%; max-height: 40vh; }
+  .clips { grid-template-columns: 1fr; }
+  .main { padding: 16px; }
+}

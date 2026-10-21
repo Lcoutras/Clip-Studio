@@ -81,6 +81,9 @@ def main(argv=None):
     p = sub.add_parser("render", help="render from an (edited) captions.csv")
     p.add_argument("target")
     p.add_argument("--format", choices=["vertical", "horizontal", "both"])
+    p = sub.add_parser("app", help="open Clip Studio to review, trim and render clips")
+    p.add_argument("folder", nargs="?", help="folder with your recordings")
+    p.add_argument("--port", type=int, default=8765)
     p = sub.add_parser("calibrate", help="check what the popup detector sees at a timestamp")
     p.add_argument("video")
     p.add_argument("--at", required=True, help="timestamp of a popup, e.g. 12:34")
@@ -95,6 +98,10 @@ def main(argv=None):
             return cmd_run(args, cfg, render_too=False)
         if args.command == "render":
             return cmd_render(args, cfg)
+        if args.command == "app":
+            from . import app
+            app.serve(cfg, args.folder, args.port)
+            return 0
         return cmd_calibrate(args, cfg)
     except (ffmpeg.FFmpegError, RuntimeError) as e:
         print(f"\nERROR: {e}")

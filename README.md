@@ -27,7 +27,23 @@ Then new recordings won't need AI voice removal and the game audio stays perfect
 
 Track 1 is then game-only, and the clipper picks it automatically.
 
-## 3. Make clips
+## 3. Clip Studio (recommended)
+
+Double-click **`app.bat`**. Clip Studio opens in your browser. It runs on your PC only, and you need to keep the black window open while using it.
+
+1. Paste your recordings folder at the top (e.g. `C:\Users\you\Videos\Rocket League`) and click **Open**.
+2. Click **Scan** next to a recording. The progress bar shows how far along it is.
+3. Each play it finds becomes a card with a preview that includes 10 extra seconds on both sides:
+   - **Trim:** drag the blue handles. The yellow line marks the play. Use **−/+** to nudge by half a second, or pause the video and click **Start here** / **End here**.
+   - **Play clip** plays just the trimmed part.
+   - **Caption:** type your own, or click 🎲 for another from the library.
+   - **Music:** leave it on Auto, or pick a song.
+   - **Kept / Discarded:** drop the clips you don't want.
+4. Click **Render** on a card, or **Render kept clips** to render them all. Then **Watch final** shows the finished vertical clip.
+
+Finished clips still go to `output\<video name>\vertical\`.
+
+## 4. Make clips without the app
 
 Drag a recording, or a whole folder of them, onto **`clip.bat`**. Results go to `output\<video name>\`:
 
@@ -60,7 +76,7 @@ Create a text file next to the recording with the same name plus `.markers.txt`,
 
 Those moments are always clipped.
 
-## 4. AI captions (optional)
+## 5. AI captions (optional)
 
 Without setup, captions come from `captions\library.yaml`: about 100 Rocket League puns and motivational lines, sorted by play type. Edit or extend it freely.
 
@@ -72,7 +88,7 @@ To have Claude write a caption for each clip based on what happens in it:
 
 Each clip then gets an AI caption in `caption` and a library caption in `alt_caption`, so you can choose either one.
 
-## 5. Tuning
+## 6. Tuning
 
 All settings live in `config.yaml`, with comments. The ones you'll use most:
 
