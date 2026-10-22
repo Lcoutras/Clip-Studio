@@ -170,9 +170,15 @@ class Studio:
             if job["video"] == name and job["status"] in ("queued", "running"):
                 self.cancel(job["id"])
 
-    def analyze(self, name, rescan=False):
+    # How often the screen is read for popups. Fast reads every 2 seconds: about twice as
+    # quick, but a popup shown for under 2 seconds can be missed.
+    SPEEDS = {"standard": 1.0, "fast": 0.5}
+
+    def analyze(self, name, rescan=False, speed="standard"):
         def run(job):
             proj = self.project(name)
+            if speed in self.SPEEDS:
+                proj.cfg = {**proj.cfg, "detection": {**proj.cfg["detection"], "ocr_fps": self.SPEEDS[speed]}}
             job["message"] = "Analyzing audio..."
 
             def progress(pct, events):
@@ -416,7 +422,8 @@ def make_handler(studio):
                     studio.remove(data["video"])
                     return self._json({"ok": True})
                 if path == "/api/analyze":
-                    return self._json(studio.analyze(data["video"], bool(data.get("rescan"))))
+                    return self._json(studio.analyze(data["video"], bool(data.get("rescan")),
+                                                     data.get("speed", "standard")))
                 if path == "/api/export":
                     return self._json(studio.export(data["video"], [int(c) for c in data["clips"]]))
                 if path == "/api/compile":

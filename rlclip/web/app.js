@@ -92,7 +92,7 @@ function renderRecordings() {
   if (state.current) sel.value = state.current;
   $("#welcome").hidden = state.videos.length > 0;
   $("#studio").hidden = state.videos.length === 0;
-  $("#recording").hidden = $("#analyze").hidden = $("#remove").hidden = state.videos.length === 0;
+  $("#recording").hidden = $("#analyze").hidden = $("#remove").hidden = $("#speed").hidden = state.videos.length === 0;
   if (!state.current && state.videos.length) selectRecording(state.videos[0].name);
   const v = state.videos.find(x => x.name === state.current);
   const busy = busyJob(state.current, "analyze");
@@ -508,7 +508,7 @@ window.onImported = async names => {
   await selectRecording(names[0]);
   for (const name of names) {
     const v = state.videos.find(x => x.name === name);
-    if (v && !v.scanned && !busyJob(name)) await api("/api/analyze", { video: name }).catch(report);
+    if (v && !v.scanned && !busyJob(name)) await api("/api/analyze", { video: name, speed: $("#speed").value }).catch(report);
   }
   refreshState();
 };
@@ -547,7 +547,8 @@ $("#analyze").onclick = async () => {
   const v = state.videos.find(x => x.name === state.current);
   if (!v) return;
   if (v.scanned && !confirm("Analyze this recording again? Your trims and edits for it will be replaced.")) return;
-  try { await api("/api/analyze", { video: v.name, rescan: v.scanned }); refreshState(); } catch (e) { report(e); }
+  try { await api("/api/analyze", { video: v.name, rescan: v.scanned, speed: $("#speed").value }); refreshState(); }
+  catch (e) { report(e); }
 };
 $("#status").onclick = () => { $("#tasks").hidden = !$("#tasks").hidden; renderTasks(); };
 $("#cancel").onclick = () => {
@@ -584,6 +585,8 @@ document.addEventListener("click", ev => {
   if (!ev.target.closest("#tasks, #status, #cancel")) $("#tasks").hidden = true;
 });
 
+$("#speed").value = load("speed", "standard");
+$("#speed").onchange = ev => store("speed", ev.target.value);
 $("#sort").onchange = ev => { state.sort = ev.target.value; renderList(); };
 $("#show-removed").onchange = ev => { state.showRemoved = ev.target.checked; renderAll(); };
 

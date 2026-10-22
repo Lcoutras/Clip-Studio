@@ -224,6 +224,7 @@ def ocr_events(info, det, progress=True, on_progress=None):
     names = det.get("player_names") or []
 
     events, last_seen = [], {}
+    prev_thumb, prev_lines, skipped = None, [], 0
     i = 0
     while True:
         buf = proc.stdout.read(frame_bytes)
@@ -232,7 +233,15 @@ def ocr_events(info, det, progress=True, on_progress=None):
         t = i / fps
         i += 1
         img = np.frombuffer(buf, dtype=np.uint8).reshape(oh, ow, 3)
-        lines = _ocr_lines(engine, img)
+        # Menus, loading screens and pauses don't change between samples; an unchanged frame
+        # reads the same, so reuse the last result instead of running OCR again.
+        thumb = img[::8, ::8].astype(np.int16)
+        if prev_thumb is not None and np.abs(thumb - prev_thumb).mean() < 1.5:
+            lines = prev_lines
+            skipped += 1
+        else:
+            lines = _ocr_lines(engine, img)
+        prev_thumb, prev_lines = thumb, lines
         texts = [text for text, conf in lines if conf >= det["ocr_min_confidence"]]
         for kw, mine in classify_frame(texts, names):
             # A popup stays on screen for a few seconds: only count its first appearance.
@@ -261,7 +270,8 @@ def ocr_events(info, det, progress=True, on_progress=None):
             sys.stdout.flush()
     proc.wait()
     if progress:
-        sys.stdout.write(f"\r  scanning video... 100.0%  ({len(events)} events)\n")
+        sys.stdout.write(f"\r  scanning video... 100.0%  ({len(events)} events, "
+                         f"{skipped} unchanged frames skipped)\n")
     return events
 
 

@@ -48,6 +48,7 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: v
 .topbar { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .brand { font-weight: 700; font-size: 16px; margin-right: 6px; }
 #recording { width: 320px; }
+#speed { width: auto; }
 .status { display: flex; align-items: center; gap: 10px; min-width: 260px; max-width: 420px; justify-content: space-between; }
 .status-text { overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
 .status-bar { width: 90px; height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; flex: none; }
