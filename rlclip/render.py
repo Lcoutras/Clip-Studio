@@ -58,7 +58,8 @@ def _demucs(src, dst, workdir):
     print("    removing voices (AI vocal separation)...")
     out = workdir / "demucs"
     result = subprocess.run([sys.executable, "-m", "demucs", "--two-stems=vocals", "-n", "htdemucs",
-                             "-o", str(out), str(src)], capture_output=True, text=True)
+                             "-o", str(out), str(src)], capture_output=True, text=True,
+                            creationflags=ffmpeg.NO_WINDOW)
     stem = out / "htdemucs" / src.stem / "no_vocals.wav"
     if result.returncode != 0 or not stem.exists():
         raise RuntimeError("Voice removal (demucs) failed:\n" + result.stderr[-2000:])
@@ -117,7 +118,7 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
     cap_png = workdir / f"caption_{layout}.png"
     overlays.caption_image(caption, (W, H), layout, font, cfg["captions"]["watermark"]).save(cap_png)
     label_png = None
-    if cfg["captions"]["show_event_label"] and label not in ("HYPE", "HIGHLIGHT"):
+    if cfg["captions"]["show_event_label"] and label not in ("HYPE", "HIGHLIGHT", "FUNNY MOMENT", "FAIL?"):
         label_png = workdir / f"label_{layout}.png"
         overlays.label_image(label, (W, H), layout, font).save(label_png)
 
@@ -162,7 +163,7 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
         graph.append("[vf]null[vz]")
 
     if layout == "vertical" and r["vertical_style"] == "crop":
-        graph.append(f"[vz]crop=ih*9/16:ih,scale={W}:{H}[comp]")
+        graph.append(f"[vz]crop=ih*9/16:ih:(iw-ow)*{float(r.get('crop_x', 0.5)):.3f}:0,scale={W}:{H}[comp]")
     elif layout == "vertical":
         graph.append(
             f"[vz]split[bg][fg];"
@@ -181,7 +182,7 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
                      f"fade=t=out:st={te_out + 1.6:.3f}:d=0.3:alpha=1[lab];"
                      f"[c1][lab]overlay=0:0:shortest=1[c2]")
         last = "c2"
-    graph.append(f"[{last}]format=yuv420p[vout]")
+    graph.append(f"[{last}]setsar=1,format=yuv420p[vout]")
 
     # ---- audio
     audio_out = None
@@ -195,8 +196,9 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
                 f"[aa][ab][ac]concat=n=3:v=0:a=1[gs]")
         else:
             graph.append(f"[{game_idx}:a]anull[gs]")
-        base = a["game_volume"] if music_idx is not None else 1.0
-        peak = max(base, a["game_volume_on_play"])
+        gain = float(a.get("gain", 1.0))
+        base = (a["game_volume"] if music_idx is not None else 1.0) * gain
+        peak = max(base, a["game_volume_on_play"] * gain)
         graph.append(f"[gs]volume='if(between(t,{te_out - 0.3:.3f},{te_out + 1.8:.3f}),{peak},{base})'"
                      f":eval=frame,atrim=0:{total:.3f}[gv]")
         audio_out = "gv"
@@ -216,13 +218,14 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
             audio_out = "mv"
     if audio_out:
         graph.append(f"[{audio_out}]alimiter=limit=0.95[aout]")
+    else:
+        # Silent track, so every clip has audio (needed to join clips into a highlight video).
+        args += ["-f", "lavfi", "-t", f"{total:.3f}", "-i", "anullsrc=r=48000:cl=stereo"]
+        graph.append(f"[{n}:a]anull[aout]")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     args += ["-filter_complex", ";".join(graph), "-map", "[vout]"]
-    if audio_out:
-        args += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
-    else:
-        args += ["-an"]
+    args += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k"]
     args += [*_encoder_args(r), "-r", str(fps), "-t", f"{total:.3f}", "-movflags", "+faststart", out_path]
     ffmpeg.run(args)
     return Path(out_path)

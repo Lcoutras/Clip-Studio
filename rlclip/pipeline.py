@@ -1,5 +1,6 @@
 """Ties detection, captions, music and rendering together for one recording."""
 
+import copy
 import csv
 import json
 import re
@@ -9,10 +10,15 @@ from pathlib import Path
 from . import captions, config, detect, ffmpeg, highlights, music, render
 
 # Bump when detection changes enough that old results should be thrown away.
-DETECTION_VERSION = 2
+DETECTION_VERSION = 3
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
-CSV_FIELDS = ["clip", "label", "score", "start", "end", "anchor", "tone", "caption", "alt_caption",
-              "music", "skip"]
+CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
+              "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
+              "framing", "crop_x"]
+
+
+def is_skipped(row):
+    return str(row.get("skip") or "").strip().lower() in ("y", "yes", "x", "1", "true")
 
 
 def find_videos(target):
@@ -77,12 +83,22 @@ class Project:
         peaks = detect.audio_peaks(self.video, track, det["audio_peak_db"]) if info.audio_tracks else []
         print(f"  audio: {len(peaks)} loud moments")
         ocr = detect.ocr_events(info, det, on_progress=on_progress)
+        # Reactions: your mic track when voices are recorded separately, otherwise loud moments
+        # in the mixed audio that aren't the goal explosion itself.
+        voice = self.cfg["audio"]["voice_track"]
+        mixed = info.audio_tracks < 2 or voice >= info.audio_tracks or voice == track
+        if not mixed:
+            reactions = detect.audio_peaks(self.video, voice, det["reaction_db"])
+        else:
+            reactions = [(t, db) for t, db in peaks if db >= det["reaction_db"]
+                         and all(abs(t - e.time) > 1.5 for e in ocr)]
+        print(f"  reactions: {len(reactions)}" + (" (from mixed audio)" if mixed else " (from your mic)"))
         markers = []
         marker_file = self.video.with_suffix(".markers.txt")
         if marker_file.exists():
             markers = detect.read_markers(marker_file)
             print(f"  markers: {len(markers)} from {marker_file.name}")
-        found = highlights.build(ocr, peaks, markers, det, info.duration)
+        found = highlights.build(ocr, peaks, markers, det, info.duration, reactions, mixed)
         data = [h.to_dict() for h in found]
         self.out_dir.mkdir(parents=True, exist_ok=True)
         with open(self.highlights_path, "w", encoding="utf-8") as f:
@@ -99,8 +115,11 @@ class Project:
         mode = render.voice_mode(self.cfg, self.info) if picker.client else None
         rows = []
         for h in found:
-            row = {"clip": h["index"], "label": h["label"], "score": h["score"],
-                   "start": h["start"], "end": h["end"], "anchor": h["anchor"], "music": "", "skip": ""}
+            category = h.get("category", "Goal")
+            hidden = category in self.cfg["detection"].get("hidden_categories", [])
+            row = {"clip": h["index"], "label": h["label"], "category": category, "score": h["score"],
+                   "start": h["start"], "end": h["end"], "anchor": h["anchor"], "music": "",
+                   "skip": "yes" if hidden else "", "reason": h.get("reason", ""), "source": "auto"}
             tone = picker.pick_tone()
             library_line = picker.from_library(h["label"], tone)
             ai_line = None
@@ -130,33 +149,67 @@ class Project:
             writer.writeheader()
             writer.writerows(rows)
 
-    def preview_path(self, clip):
-        return self.out_dir / "previews" / f"{int(clip):02d}.mp4"
+    def add_manual(self, at, label="HIGHLIGHT"):
+        """Add a clip the detector missed, centred on `at` seconds. Returns the new row."""
+        det = self.cfg["detection"]
+        rows = self.read_rows() if self.csv_path.exists() else []
+        picker = captions.CaptionPicker(self.cfg, config.resolve(self.cfg["output_dir"]) / ".captions_used.json")
+        tone = picker.pick_tone()
+        at = min(max(0.0, float(at)), self.info.duration)
+        row = {"clip": max([int(r["clip"]) for r in rows] + [0]) + 1, "label": label, "category": "Manual",
+               "score": "", "start": f"{max(0.0, at - det['pre_seconds']):.2f}",
+               "end": f"{min(self.info.duration, at + det['post_seconds'] + 1):.2f}", "anchor": f"{at:.2f}",
+               "tone": tone, "caption": picker.from_library(label, tone),
+               "alt_caption": picker.from_library(label, tone), "music": "", "skip": "",
+               "reason": "Added by you", "source": "manual"}
+        picker.save_state()
+        rows.append(row)
+        rows.sort(key=lambda r: float(r["anchor"]))
+        self.write_rows(rows)
+        return row
 
-    def make_previews(self, buffer=10.0, create=True):
-        """Small 540p previews of each play with extra footage on both sides, for trimming.
-
-        Returns {clip number: preview start time in the recording}.
-        """
-        found = self.load_highlights() or []
-        windows = {}
-        for h in found:
-            start = max(0.0, h["start"] - buffer)
-            end = min(self.info.duration, h["end"] + buffer)
-            windows[h["index"]] = start
-            out = self.preview_path(h["index"])
-            if out.exists() or not create:
-                continue
-            out.parent.mkdir(parents=True, exist_ok=True)
-            ffmpeg.run(["-ss", f"{start:.3f}", "-i", self.video, "-t", f"{end - start:.3f}",
-                        "-map", "0:v:0", "-map", "0:a:0?", "-vf", "scale=-2:540",
-                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "27",
-                        "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", out])
-        return windows
+    def compile(self, clips, layout, on_progress=None):
+        """Join already-exported clips (in the given order) into one highlight video."""
+        rows = {int(r["clip"]): r for r in self.read_rows()}
+        parts = [self.out_dir / layout / f"{self.output_name(rows[c])}.mp4" for c in clips if c in rows]
+        parts = [p for p in parts if p.exists()]
+        if not parts:
+            raise RuntimeError("Export the clips first, then build the highlight video from them")
+        out = self.out_dir / f"{self.video.stem}_HIGHLIGHTS_{layout}.mp4"
+        first = ffmpeg.probe(parts[0])
+        fps = self.cfg["render"]["fps"]
+        args, graph = [], []
+        for i, p in enumerate(parts):
+            args += ["-i", p]
+            # Make every part identical in size, pixel shape, frame rate and audio format.
+            graph.append(f"[{i}:v:0]scale={first.width}:{first.height},setsar=1,fps={fps},format=yuv420p[v{i}];"
+                         f"[{i}:a:0]aresample=48000,aformat=channel_layouts=stereo[a{i}]")
+        streams = "".join(f"[v{i}][a{i}]" for i in range(len(parts)))
+        graph.append(f"{streams}concat=n={len(parts)}:v=1:a=1[v][a]")
+        args += ["-filter_complex", ";".join(graph),
+                 "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+                 "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]
+        if on_progress:
+            on_progress(f"Joining {len(parts)} clips...")
+        ffmpeg.run(args)
+        return out
 
     # ------------------------------------------------------------ step 3
     def output_name(self, row):
         return f"{self.video.stem}_{int(row['clip']):02d}_{_slug(row['label'])}"
+
+    def clip_config(self, row):
+        """Settings for one clip: the global config plus that clip's volume/framing tweaks."""
+        cfg = copy.deepcopy(self.cfg)
+        if row.get("game_volume") not in (None, ""):
+            cfg["audio"]["gain"] = float(row["game_volume"]) / 100
+        if row.get("music_volume") not in (None, ""):
+            cfg["music"]["volume"] *= float(row["music_volume"]) / 100
+        if row.get("framing") in ("blur", "crop"):
+            cfg["render"]["vertical_style"] = row["framing"]
+        if row.get("crop_x") not in (None, ""):
+            cfg["render"]["crop_x"] = float(row["crop_x"])
+        return cfg
 
     def render_all(self, rows, formats, on_clip=None):
         cfg = self.cfg
@@ -168,8 +221,9 @@ class Project:
 
         made = []
         for row in rows:
-            if str(row.get("skip", "")).strip().lower() in ("y", "yes", "x", "1", "true"):
+            if is_skipped(row):
                 continue
+            cfg = self.clip_config(row)
             idx = int(row["clip"])
             start, end, anchor = float(row["start"]), float(row["end"]), float(row["anchor"])
             work = _workdir(self.out_dir, row)

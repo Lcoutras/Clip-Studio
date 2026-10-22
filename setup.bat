@@ -32,10 +32,16 @@ if not exist .venv (
 .venv\Scripts\python -m pip install --upgrade pip >nul
 .venv\Scripts\python -m pip install -r requirements.txt || goto :fail
 
+echo Creating the Clip Studio desktop shortcut...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$d=[Environment]::GetFolderPath('Desktop'); $s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d 'Clip Studio.lnk'));" ^
+  "$s.TargetPath=(Resolve-Path '.venv\Scripts\pythonw.exe').Path; $s.Arguments='-m rlclip studio';" ^
+  "$s.WorkingDirectory=(Get-Location).Path; $s.Description='Clip Studio'; $s.Save()"
+
 echo.
 echo Setup complete.
+echo  - Open Clip Studio from the shortcut on your desktop (or double-click "Clip Studio.vbs")
 echo  - Put music in the music\hype, music\funny and music\chill folders
-echo  - Drag a recording (or a folder of them) onto clip.bat
 echo  - For your older recordings with voices mixed in, also run setup-voice-removal.bat
 pause
 exit /b 0

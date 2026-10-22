@@ -1,8 +1,27 @@
 "use strict";
 
 const $ = (sel, root = document) => root.querySelector(sel);
-const state = { folder: "", videos: [], jobs: [], music: [], current: null, clips: [], filter: "all" };
-const jobStatus = new Map();   // job id -> last seen status, to notice when jobs finish
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const player = $("#player");
+
+const COLORS = {
+  "Goal": "var(--c-goal)", "Aerial": "var(--c-aerial)", "Save": "var(--c-save)", "Demo": "var(--c-demo)",
+  "Assist": "var(--c-assist)", "Funny Moment": "var(--c-funny)", "Fail?": "var(--c-fail)", "Manual": "var(--c-manual)",
+};
+
+const state = {
+  videos: [], jobs: [], music: [], categories: [], format: "vertical",
+  current: null, clips: [], source: null, sel: null, win: null, stopAt: null,
+  hidden: new Set(load("hiddenCats", [])), showRemoved: false, sort: "time",
+};
+const jobStatus = new Map();
+
+function load(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+}
+function store(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage unavailable */ }
+}
 
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : {
@@ -12,347 +31,587 @@ async function api(path, body) {
   if (!res.ok || data.error) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }
+const report = err => { console.error(err); alert(err.message || String(err)); };
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
-function report(err) {
-  console.error(err);
-  alert(err.message || String(err));
+function fmtTime(sec) {
+  sec = Math.max(0, sec || 0);
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60);
+  const mm = h ? String(m).padStart(2, "0") : String(m);
+  return (h ? `${h}:` : "") + `${mm}:${String(s).padStart(2, "0")}`;
 }
-
-function debounce(fn, ms) {
-  let timer;
-  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
-}
-
 const fmtRel = t => (t >= 0 ? "+" : "−") + Math.abs(t).toFixed(1) + "s";
+const selClip = () => state.clips.find(c => c.clip === state.sel);
+const typing = () => ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
 
-// ------------------------------------------------------------------ sidebar
+// ------------------------------------------------------------------ app state + tasks
 
 async function refreshState() {
   let data;
-  try { data = await api("/api/state"); } catch (e) { return; }
-  state.videos = data.videos;
-  state.jobs = data.jobs;
-  state.music = data.music;
-  if (!state.folder && data.folder) $("#folder").value = data.folder;
-  state.folder = data.folder;
-  renderVideos();
-  renderJobs();
-
+  try { data = await api("/api/state"); } catch { return; }
+  Object.assign(state, { videos: data.videos, jobs: data.jobs, music: data.music,
+                         categories: data.categories, format: data.format });
+  renderRecordings();
+  renderStatus();
   for (const job of data.jobs) {
     const before = jobStatus.get(job.id);
     jobStatus.set(job.id, job.status);
     if (before === undefined || before === job.status) continue;
-    if ((job.status === "done" || job.status === "error") && job.video === state.current) {
-      if (job.kind === "scan") loadClips();
-      else softRefresh();
+    if (job.status === "done" || job.status === "error") {
+      if (job.video === state.current) {
+        if (job.kind === "analyze") loadClips(true);
+        else softRefresh();
+      }
+      if (job.kind === "compile" && job.status === "done" && job.result) openModal(job.result);
     }
   }
 }
 
-function busyJob(name) {
-  return state.jobs.find(j => j.video === name && (j.status === "queued" || j.status === "running"));
+function renderRecordings() {
+  const sel = $("#recording");
+  const names = state.videos.map(v => v.name).join("|");
+  if (sel.dataset.names !== names) {
+    sel.dataset.names = names;
+    sel.innerHTML = "";
+    for (const v of state.videos) {
+      const o = document.createElement("option");
+      o.value = v.name;
+      sel.appendChild(o);
+    }
+  }
+  for (const o of sel.options) {
+    const v = state.videos.find(x => x.name === o.value);
+    o.textContent = `${v.name}  —  ${v.scanned ? `${v.kept} kept of ${v.clips}` : "not analyzed"}`;
+  }
+  if (state.current) sel.value = state.current;
+  $("#welcome").hidden = state.videos.length > 0;
+  $("#studio").hidden = state.videos.length === 0;
+  $("#recording").hidden = $("#analyze").hidden = state.videos.length === 0;
+  if (!state.current && state.videos.length) selectRecording(state.videos[0].name);
+  const v = state.videos.find(x => x.name === state.current);
+  const busy = busyJob(state.current, "analyze");
+  $("#analyze").textContent = busy ? "Analyzing..." : v?.scanned ? "Re-analyze" : "Analyze";
+  $("#analyze").disabled = Boolean(busy);
 }
 
-function renderVideos() {
-  const list = $("#videos");
-  list.innerHTML = "";
-  if (!state.videos.length) {
-    list.innerHTML = `<li class="muted">${state.folder ? "No videos in this folder" : "Open a folder above"}</li>`;
-    return;
-  }
-  for (const v of state.videos) {
-    const li = document.createElement("li");
-    li.className = v.name === state.current ? "active" : "";
-    const job = busyJob(v.name);
-    const status = job ? job.message : v.scanned ? `${v.clips} clip${v.clips === 1 ? "" : "s"}` : "Not scanned";
-    li.innerHTML = `<div><div class="name"></div><div class="status"></div></div><button></button>`;
-    $(".name", li).textContent = v.name;
-    $(".status", li).textContent = status;
-    const btn = $("button", li);
-    btn.textContent = job ? "Working..." : v.scanned ? "Rescan" : "Scan";
-    btn.disabled = Boolean(job);
-    btn.onclick = async ev => {
-      ev.stopPropagation();
-      if (v.scanned && !confirm("Scan this recording again? Your trims and caption edits for it will be replaced.")) return;
-      try {
-        await api("/api/scan", { video: v.name, rescan: v.scanned });
-        selectVideo(v.name);
-        refreshState();
-      } catch (e) { report(e); }
-    };
-    li.onclick = () => selectVideo(v.name);
-    list.appendChild(li);
-  }
+function busyJob(name, kind) {
+  return state.jobs.find(j => j.video === name && (!kind || j.kind === kind) &&
+                              (j.status === "queued" || j.status === "running"));
 }
 
-function renderJobs() {
-  const box = $("#jobs");
-  const active = state.jobs.filter(j => j.status !== "done").slice(-6);
-  box.innerHTML = "";
-  for (const job of active) {
+function renderStatus() {
+  const running = state.jobs.find(j => j.status === "running");
+  const queued = state.jobs.filter(j => j.status === "queued").length;
+  const lastErr = [...state.jobs].reverse().find(j => j.status === "error");
+  const btn = $("#status");
+  btn.classList.toggle("error", !running && Boolean(lastErr) && lastErr === state.jobs.at(-1));
+  if (running) {
+    $(".status-text", btn).textContent = running.message + (queued ? ` (+${queued} waiting)` : "");
+    $(".status-fill", btn).style.width = `${running.progress}%`;
+  } else {
+    const last = state.jobs.at(-1);
+    $(".status-text", btn).textContent = last ? (last.status === "error" ? "Failed: " : "") + last.message : "Ready";
+    $(".status-fill", btn).style.width = last && last.status === "done" ? "100%" : "0%";
+  }
+  if (!$("#tasks").hidden) renderTasks();
+}
+
+function renderTasks() {
+  const box = $("#tasks");
+  box.innerHTML = state.jobs.length ? "" : `<div class="muted">No tasks yet.</div>`;
+  for (const job of [...state.jobs].reverse()) {
     const el = document.createElement("div");
-    el.className = "job" + (job.status === "error" ? " error" : "");
-    el.innerHTML = `<div class="msg"></div><div class="bar"><div class="fill"></div></div>`;
-    $(".msg", el).textContent = `${job.video}: ${job.status === "error" ? "Failed - " : ""}${job.message}`;
+    el.className = "task" + (job.status === "error" ? " error" : "");
+    el.innerHTML = `<div><b></b> · <span class="m"></span></div><div class="bar"><div class="fill"></div></div>`;
+    $("b", el).textContent = `${job.kind[0].toUpperCase()}${job.kind.slice(1)} ${job.video}`;
+    $(".m", el).textContent = job.status === "queued" ? "waiting" : job.message;
     $(".fill", el).style.width = `${job.progress}%`;
+    if (job.result) {
+      const a = document.createElement("a");
+      a.href = "#";
+      a.textContent = " Watch";
+      a.onclick = ev => { ev.preventDefault(); openModal(job.result); };
+      $(".m", el).after(a);
+    }
     box.appendChild(el);
   }
 }
 
-// ------------------------------------------------------------------ clips
+// ------------------------------------------------------------------ recordings + clips
 
-async function selectVideo(name) {
+async function selectRecording(name) {
+  if (state.current === name) return;
   state.current = name;
-  renderVideos();
-  $("#empty").hidden = true;
-  $("#workspace").hidden = false;
-  $("#title").textContent = name;
-  await loadClips();
+  state.sel = null;
+  $("#recording").value = name;
+  await loadClips(true);
 }
 
-async function loadClips() {
+async function loadClips(resetSource) {
   if (!state.current) return;
-  try {
-    state.clips = await api(`/api/clips?video=${encodeURIComponent(state.current)}`);
-  } catch (e) { return report(e); }
-  renderClips();
+  let data;
+  try { data = await api(`/api/clips?video=${encodeURIComponent(state.current)}`); }
+  catch (e) { return report(e); }
+  state.clips = data.clips;
+  if (resetSource || state.source !== data.source) {
+    state.source = data.source;
+    $("#player-msg").hidden = true;
+    player.src = data.source;
+  }
+  if (!selClip()) state.sel = visibleClips()[0]?.clip ?? null;
+  renderAll();
+  if (state.sel !== null) seekTo(selClip().start);
 }
 
 async function softRefresh() {
-  // Update previews / finished renders without rebuilding cards (keeps videos playing).
-  let fresh;
-  try { fresh = await api(`/api/clips?video=${encodeURIComponent(state.current)}`); } catch (e) { return; }
-  if (fresh.length !== state.clips.length) { state.clips = fresh; return renderClips(); }
-  fresh.forEach((c, i) => {
-    const old = state.clips[i];
-    old.rendered = c.rendered;
-    if (!old.preview && c.preview) { old.preview = c.preview; old.preview_start = c.preview_start; }
-    old.card?.refresh();
-  });
+  let data;
+  try { data = await api(`/api/clips?video=${encodeURIComponent(state.current)}`); } catch { return; }
+  const byId = new Map(data.clips.map(c => [c.clip, c]));
+  for (const c of state.clips) if (byId.has(c.clip)) c.rendered = byId.get(c.clip).rendered;
+  renderList();
+  renderEditor();
 }
 
-function updateSummary() {
-  const kept = state.clips.filter(c => !c.skip).length;
-  $("#summary").textContent = state.clips.length
-    ? `${state.clips.length} clip${state.clips.length === 1 ? "" : "s"} found · ${kept} kept`
-    : busyJob(state.current) ? "Scanning..." : "No clips yet - click Scan on the left";
-  $("#render-all").disabled = kept === 0;
-  $("#render-all").textContent = `Render kept clips (${kept})`;
+function visibleClips() {
+  const list = state.clips.filter(c => !state.hidden.has(c.category) && (state.showRemoved || !c.skip));
+  return state.sort === "score"
+    ? list.sort((a, b) => (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0))
+    : list.sort((a, b) => a.anchor - b.anchor);
 }
 
-function applyFilter() {
-  for (const c of state.clips) {
-    const show = state.filter === "all" || (state.filter === "kept") === !c.skip;
-    c.card.el.hidden = !show;
-  }
+function renderAll() {
+  renderChips();
+  renderList();
+  renderEditor();
+  renderTimeline();
+  renderOverview();
 }
 
-function renderClips() {
-  const box = $("#clips");
+function renderChips() {
+  const box = $("#chips");
   box.innerHTML = "";
-  for (const clip of state.clips) {
-    clip.card = makeCard(clip);
-    box.appendChild(clip.card.el);
+  for (const cat of state.categories) {
+    const n = state.clips.filter(c => c.category === cat && (state.showRemoved || !c.skip)).length;
+    const b = document.createElement("button");
+    b.className = "chip" + (state.hidden.has(cat) ? " off" : "");
+    b.innerHTML = `<span class="dot"></span><span></span>`;
+    $(".dot", b).style.background = COLORS[cat];
+    $("span:last-child", b).textContent = `${cat} ${n}`;
+    b.onclick = () => {
+      state.hidden.has(cat) ? state.hidden.delete(cat) : state.hidden.add(cat);
+      store("hiddenCats", [...state.hidden]);
+      renderAll();
+    };
+    box.appendChild(b);
   }
-  updateSummary();
-  applyFilter();
 }
 
-function makeCard(clip) {
-  const el = $("#clip-template").content.firstElementChild.cloneNode(true);
-  const video = $("video", el);
-  const track = $(".track", el);
-  const caption = $(".caption", el);
-  const musicSel = $(".music", el);
-  let duration = 0;
-  let playingClip = false;
-
-  $(".num", el).textContent = `#${String(clip.clip).padStart(2, "0")}`;
-  $(".label", el).textContent = clip.label;
-  $(".score", el).textContent = `score ${Number(clip.score).toFixed(1)}`;
-  caption.value = clip.caption;
-
-  musicSel.innerHTML = `<option value="">Auto (matches the play)</option>`;
-  for (const m of state.music) {
-    const opt = document.createElement("option");
-    opt.value = m.split("/").pop();
-    opt.textContent = m;
-    musicSel.appendChild(opt);
+function renderList() {
+  const ul = $("#cliplist");
+  ul.innerHTML = "";
+  const list = visibleClips();
+  if (!list.length) {
+    const v = state.videos.find(x => x.name === state.current);
+    ul.innerHTML = `<li class="muted">${busyJob(state.current, "analyze") ? "Analyzing... clips appear here when it's done."
+      : v?.scanned ? "No clips match. Turn categories back on above." : "Click Analyze to find clips."}</li>`;
   }
-  musicSel.value = clip.music || "";
-
-  // Times inside the preview video.
-  const local = t => t - clip.preview_start;
-  const pct = t => duration ? `${Math.min(100, Math.max(0, (t / duration) * 100))}%` : "0%";
-
-  function draw() {
-    const s = local(clip.start), e = local(clip.end), a = local(clip.anchor);
-    $(".range", el).style.left = pct(s);
-    $(".range", el).style.width = duration ? `${((e - s) / duration) * 100}%` : "0%";
-    $(".handle.start", el).style.left = pct(s);
-    $(".handle.end", el).style.left = pct(e);
-    $(".anchor", el).style.left = pct(a);
-    $(".t-start", el).textContent = `Start ${fmtRel(clip.start - clip.anchor)}`;
-    $(".t-end", el).textContent = `End ${fmtRel(clip.end - clip.anchor)}`;
-    $(".length", el).textContent = `${(clip.end - clip.start).toFixed(1)}s`;
+  for (const c of list) {
+    const li = document.createElement("li");
+    li.className = (c.clip === state.sel ? "sel " : "") + (c.skip ? "removed" : "");
+    li.innerHTML = `<span class="dot"></span><span class="t"></span><span class="meta"></span><span class="why"></span>`;
+    $(".dot", li).style.background = COLORS[c.category] || "var(--muted)";
+    $(".t", li).textContent = c.label === "HIGHLIGHT" ? "Manual clip" : titleCase(c.label);
+    $(".meta", li).textContent = `${fmtTime(c.anchor)} · ${(c.end - c.start).toFixed(0)}s`;
+    $(".why", li).textContent = (c.rendered ? "✓ exported · " : "") + (c.reason || "");
+    li.onclick = () => selectClip(c.clip);
+    ul.appendChild(li);
   }
+  const kept = state.clips.filter(c => !c.skip).length;
+  $("#export-kept").textContent = `Export kept clips (${kept})`;
+  $("#export-kept").disabled = $("#compile").disabled = kept === 0;
+}
 
-  function refresh() {
-    if (clip.preview && !video.src) {
-      video.src = clip.preview;
-      $(".loading", el).hidden = true;
-    } else if (!clip.preview) {
-      $(".loading", el).hidden = false;
+const titleCase = s => s.toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
+
+function selectClip(n) {
+  state.sel = n;
+  state.win = null;
+  state.stopAt = null;
+  renderList();
+  renderEditor();
+  renderTimeline();
+  renderOverview();
+  const c = selClip();
+  if (c) seekTo(c.start);
+}
+
+function seekTo(t) {
+  if (!isFinite(t)) return;
+  if (player.readyState >= 1) player.currentTime = t;
+  else player.addEventListener("loadedmetadata", () => { player.currentTime = t; }, { once: true });
+}
+
+// ------------------------------------------------------------------ editor
+
+function renderEditor() {
+  const c = selClip();
+  $("#editor").style.visibility = c ? "visible" : "hidden";
+  if (!c) return;
+  $("#ed-title").textContent = c.label === "HIGHLIGHT" ? "Manual clip" : titleCase(c.label);
+  $("#ed-time").textContent = `At ${fmtTime(c.anchor)} in the recording`;
+  const cat = $("#ed-category");
+  if (cat.options.length !== state.categories.length) {
+    cat.innerHTML = "";
+    for (const x of state.categories) cat.add(new Option(x, x));
+  }
+  cat.value = c.category;
+  $("#ed-reason").textContent = c.reason ? `Why: ${c.reason}` : "";
+  const keep = $("#ed-keep");
+  keep.textContent = c.skip ? "Removed — click to keep" : "Kept — click to remove";
+  keep.className = "keep " + (c.skip ? "removed" : "kept");
+  $("#ed-start").textContent = fmtRel(c.start - c.anchor);
+  $("#ed-end").textContent = fmtRel(c.end - c.anchor);
+  $("#ed-length").textContent = `${(c.end - c.start).toFixed(1)} seconds (${fmtTime(c.start)} – ${fmtTime(c.end)})`;
+  if (document.activeElement !== $("#ed-caption")) $("#ed-caption").value = c.caption || "";
+
+  const music = $("#ed-music");
+  const wanted = ["", ...state.music].join("|");
+  if (music.dataset.list !== wanted) {
+    music.dataset.list = wanted;
+    music.innerHTML = `<option value="">Auto (matches the play)</option>`;
+    for (const m of state.music) {
+      const o = document.createElement("option");
+      o.value = m.split("/").pop();
+      o.textContent = m;
+      music.appendChild(o);
     }
-    el.classList.toggle("discarded", clip.skip);
-    const keep = $(".keep", el);
-    keep.textContent = clip.skip ? "Discarded — keep it" : "Kept — discard";
-    keep.className = "keep " + (clip.skip ? "is-discarded" : "is-kept");
-    $(".view", el).hidden = !clip.rendered;
-    $("[data-act=render]", el).textContent = clip.rendered ? "Re-render" : "Render";
-    draw();
+    if (!state.music.length) music.innerHTML = `<option value="">No music yet — add songs to the music folder</option>`;
   }
+  music.value = c.music || "";
+  $("#ed-game").value = c.game_volume;
+  $("#ed-game-v").textContent = `${Math.round(c.game_volume)}%`;
+  $("#ed-musicvol").value = c.music_volume;
+  $("#ed-musicvol-v").textContent = `${Math.round(c.music_volume)}%`;
+  for (const b of $$("#ed-framing button")) b.classList.toggle("active", b.dataset.framing === c.framing);
+  $("#crop-row").hidden = c.framing !== "crop" || state.format !== "vertical";
+  $("#ed-framing").hidden = state.format !== "vertical";
+  $("#ed-cropx").value = c.crop_x;
+  $("#crop-row span").textContent = c.crop_x < 0.4 ? "Left" : c.crop_x > 0.6 ? "Right" : "Center";
+  const job = busyJob(state.current, "export");
+  $("#ed-export").textContent = c.rendered ? "Re-export this clip" : "Export this clip";
+  $("#ed-export").disabled = c.skip;
+  $("#ed-watch").hidden = !c.rendered;
+  if (job) $("#ed-export").textContent = "Exporting...";
+}
 
-  const save = async fields => {
-    try { await api("/api/clip", { video: state.current, clip: clip.clip, fields }); }
-    catch (e) { report(e); }
+const pending = new Map();
+function save(fields, clip = selClip()) {
+  if (!clip) return;
+  Object.assign(clip, fields);
+  const key = clip.clip;
+  pending.set(key, { ...(pending.get(key) || {}), ...fields });
+  flush(key, clip);
+}
+const flush = debounce(async (key) => {
+  const fields = pending.get(key);
+  pending.delete(key);
+  if (!fields) return;
+  try { await api("/api/clip", { video: state.current, clip: key, fields }); }
+  catch (e) { report(e); }
+}, 350);
+
+function setTrim(which, t) {
+  const c = selClip();
+  if (!c) return;
+  const dur = player.duration || Infinity;
+  if (which === "start") c.start = Math.min(Math.max(0, t), c.end - 1);
+  else c.end = Math.max(Math.min(dur, t), c.start + 1);
+  c.start = Math.round(c.start * 100) / 100;
+  c.end = Math.round(c.end * 100) / 100;
+  save({ start: c.start, end: c.end });
+  renderEditor();
+  renderTimeline();
+  renderOverview();
+}
+
+// ------------------------------------------------------------------ timelines
+
+function windowFor(c) {
+  const dur = player.duration || c.end + 20;
+  let w = state.win;
+  if (!w || c.start < w[0] || c.end > w[1]) {
+    w = [Math.max(0, c.start - 15), Math.min(dur, c.end + 15)];
+    if (w[1] - w[0] < 20) w[1] = Math.min(dur, w[0] + 20);
+  }
+  state.win = w;
+  return w;
+}
+
+function renderTimeline() {
+  const c = selClip();
+  const box = $("#detail");
+  box.style.visibility = c ? "visible" : "hidden";
+  if (!c) return;
+  const [w0, w1] = windowFor(c);
+  const pct = t => `${((t - w0) / (w1 - w0)) * 100}%`;
+  $(".d-range", box).style.left = pct(c.start);
+  $(".d-range", box).style.width = `${((c.end - c.start) / (w1 - w0)) * 100}%`;
+  $(".d-handle.start", box).style.left = pct(c.start);
+  $(".d-handle.end", box).style.left = pct(c.end);
+  $(".d-anchor", box).style.left = pct(c.anchor);
+  const ticks = $(".d-ticks", box);
+  ticks.innerHTML = "";
+  for (let s = Math.ceil((w0 - c.anchor) / 5) * 5; c.anchor + s <= w1; s += 5) {
+    const sp = document.createElement("span");
+    sp.style.left = pct(c.anchor + s);
+    sp.textContent = s === 0 ? "play" : `${s > 0 ? "+" : ""}${s}s`;
+    ticks.appendChild(sp);
+  }
+  drawPlayheads();
+}
+
+function renderOverview() {
+  const box = $("#overview");
+  $$(".o-mark", box).forEach(m => m.remove());
+  const dur = player.duration;
+  if (!dur) return;
+  for (const c of state.clips) {
+    if (state.hidden.has(c.category)) continue;
+    const m = document.createElement("div");
+    m.className = "o-mark" + (c.skip ? " removed" : "") + (c.clip === state.sel ? " sel" : "");
+    m.style.left = `${(c.start / dur) * 100}%`;
+    m.style.width = `${((c.end - c.start) / dur) * 100}%`;
+    m.style.background = COLORS[c.category];
+    m.title = `${c.label} at ${fmtTime(c.anchor)}`;
+    m.onclick = ev => { ev.stopPropagation(); selectClip(c.clip); };
+    box.appendChild(m);
+  }
+}
+
+function drawPlayheads() {
+  const t = player.currentTime;
+  if (state.win) {
+    const [w0, w1] = state.win;
+    const inside = t >= w0 && t <= w1;
+    $(".d-playhead").style.display = inside ? "block" : "none";
+    $(".d-playhead").style.left = `${((t - w0) / (w1 - w0)) * 100}%`;
+  }
+  if (player.duration) $(".o-playhead").style.left = `${(t / player.duration) * 100}%`;
+  $("#clock").textContent = `${fmtTime(t)} / ${fmtTime(player.duration)}`;
+}
+
+function timeAt(ev, el, w0, w1) {
+  const r = el.getBoundingClientRect();
+  return w0 + Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)) * (w1 - w0);
+}
+
+$("#detail").addEventListener("pointerdown", ev => {
+  const c = selClip();
+  if (!c || !state.win) return;
+  const [w0, w1] = state.win;
+  const handle = ev.target.closest(".d-handle");
+  if (!handle) { seekTo(timeAt(ev, $("#detail"), w0, w1)); return; }
+  const which = handle.classList.contains("start") ? "start" : "end";
+  const el = $("#detail");
+  el.setPointerCapture(ev.pointerId);
+  player.pause();
+  const move = e => {
+    const t = timeAt(e, el, w0, w1);
+    setTrim(which, t);
+    seekTo(which === "start" ? c.start : c.end);
   };
-  const saveTrim = debounce(() => save({ start: clip.start, end: clip.end }), 350);
-  const saveCaption = debounce(() => save({ caption: clip.caption }), 500);
+  const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); };
+  el.addEventListener("pointermove", move);
+  el.addEventListener("pointerup", up);
+});
 
-  function setTrim(which, t) {
-    // Times are absolute (seconds into the recording); keep at least 1s and inside the preview.
-    const min = clip.preview_start, max = clip.preview_start + (duration || 1e9);
-    if (which === "start") clip.start = Math.min(Math.max(t, min), clip.end - 1);
-    else clip.end = Math.max(Math.min(t, max), clip.start + 1);
-    clip.start = Math.round(clip.start * 100) / 100;
-    clip.end = Math.round(clip.end * 100) / 100;
-    draw();
-    saveTrim();
+$("#overview").addEventListener("pointerdown", ev => {
+  if (!player.duration || ev.target.classList.contains("o-mark")) return;
+  seekTo(timeAt(ev, $("#overview"), 0, player.duration));
+});
+
+// ------------------------------------------------------------------ player
+
+player.addEventListener("loadedmetadata", () => { renderOverview(); renderTimeline(); });
+player.addEventListener("timeupdate", () => {
+  drawPlayheads();
+  if (state.stopAt !== null && player.currentTime >= state.stopAt) {
+    player.pause();
+    state.stopAt = null;
   }
+});
+player.addEventListener("pause", () => { $("#playpause").innerHTML = "&#9654;"; });
+player.addEventListener("play", () => { $("#playpause").innerHTML = "&#10073;&#10073;"; });
+player.addEventListener("error", () => {
+  if (!player.getAttribute("src")) return;
+  const msg = $("#player-msg");
+  msg.hidden = false;
+  msg.textContent = "This recording can't be played here (MKV files usually can't). Analysis and export " +
+    "still work. To preview it, remux it to MP4 in OBS (File → Remux Recordings) and import that.";
+});
+setInterval(drawPlayheads, 250);
 
-  video.addEventListener("loadedmetadata", () => { duration = video.duration; draw(); });
-  video.addEventListener("timeupdate", () => {
-    $(".playhead", el).style.left = pct(video.currentTime);
-    if (playingClip && video.currentTime >= local(clip.end)) {
-      video.pause();
-      playingClip = false;
-    }
-  });
-  video.addEventListener("pause", () => { playingClip = false; });
-
-  // Dragging handles, or clicking the bar to jump there.
-  const timeAt = ev => {
-    const r = track.getBoundingClientRect();
-    return clip.preview_start + Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)) * duration;
-  };
-  track.addEventListener("pointerdown", ev => {
-    if (!duration) return;
-    const handle = ev.target.closest(".handle");
-    if (!handle) { video.currentTime = local(timeAt(ev)); return; }
-    const which = handle.classList.contains("start") ? "start" : "end";
-    track.setPointerCapture(ev.pointerId);
-    const move = e => { setTrim(which, timeAt(e)); video.currentTime = local(which === "start" ? clip.start : clip.end); };
-    const up = () => { track.removeEventListener("pointermove", move); track.removeEventListener("pointerup", up); };
-    track.addEventListener("pointermove", move);
-    track.addEventListener("pointerup", up);
-  });
-
-  el.addEventListener("click", async ev => {
-    const act = ev.target.closest("[data-act]")?.dataset.act;
-    if (!act) return;
-    const now = clip.preview_start + video.currentTime;
-    switch (act) {
-      case "start-": setTrim("start", clip.start - 0.5); break;
-      case "start+": setTrim("start", clip.start + 0.5); break;
-      case "end-": setTrim("end", clip.end - 0.5); break;
-      case "end+": setTrim("end", clip.end + 0.5); break;
-      case "set-start": setTrim("start", now); break;
-      case "set-end": setTrim("end", now); break;
-      case "play":
-        video.currentTime = local(clip.start);
-        playingClip = true;
-        video.play();
-        break;
-      case "shuffle":
-        try {
-          const s = await api("/api/caption", { label: clip.label, tone: clip.tone });
-          clip.caption = caption.value = s.caption;
-          save({ caption: clip.caption });
-        } catch (e) { report(e); }
-        break;
-      case "toggle":
-        clip.skip = !clip.skip;
-        await save({ skip: clip.skip });
-        refresh();
-        updateSummary();
-        applyFilter();
-        break;
-      case "render":
-        try {
-          ev.target.textContent = "Queued...";
-          ev.target.disabled = true;
-          await api("/api/render", { video: state.current, clips: [clip.clip] });
-          refreshState();
-        } catch (e) { report(e); }
-        setTimeout(() => { ev.target.disabled = false; }, 1500);
-        break;
-      case "view":
-        openModal(clip);
-        break;
-    }
-  });
-
-  caption.addEventListener("input", () => { clip.caption = caption.value; saveCaption(); });
-  musicSel.addEventListener("change", () => { clip.music = musicSel.value; save({ music: clip.music }); });
-
-  refresh();
-  return { el, refresh };
+function playClip() {
+  const c = selClip();
+  if (!c) return;
+  player.currentTime = c.start;
+  state.stopAt = c.end;
+  player.play();
 }
 
-function openModal(clip) {
-  $("#modal-video").src = clip.rendered;
-  $("#modal-caption").textContent = clip.caption;
-  $("#modal").hidden = false;
-  $("#modal-video").play();
+function step(dir) {
+  const list = visibleClips();
+  const i = list.findIndex(c => c.clip === state.sel);
+  const next = list[Math.min(list.length - 1, Math.max(0, i + dir))];
+  if (next) selectClip(next.clip);
 }
 
-function closeModal() {
-  $("#modal-video").pause();
-  $("#modal").hidden = true;
+// ------------------------------------------------------------------ import
+
+async function importPaths(paths) {
+  if (!paths || !paths.length) return;
+  try {
+    const res = await api("/api/import", { paths });
+    await window.onImported(res.added);
+  } catch (e) { report(e); }
 }
+
+window.onImported = async names => {
+  await refreshState();
+  if (!names || !names.length) return;
+  await selectRecording(names[0]);
+  for (const name of names) {
+    const v = state.videos.find(x => x.name === name);
+    if (v && !v.scanned && !busyJob(name)) await api("/api/analyze", { video: name }).catch(report);
+  }
+  refreshState();
+};
+
+async function browse() {
+  if (window.pywebview?.api?.browse) {
+    importPaths(await window.pywebview.api.browse());
+    return;
+  }
+  const p = prompt("Paste the full path of a recording or a folder of recordings:");
+  if (p) importPaths([p]);
+}
+
+let dragDepth = 0;
+document.addEventListener("dragenter", ev => {
+  if (![...(ev.dataTransfer?.types || [])].includes("Files")) return;
+  dragDepth++;
+  $("#dropzone").hidden = false;
+});
+document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#dropzone").hidden = true; } });
+document.addEventListener("dragover", ev => ev.preventDefault());
+document.addEventListener("drop", ev => {
+  ev.preventDefault();
+  dragDepth = 0;
+  $("#dropzone").hidden = true;
+  // In the desktop app the drop is handled natively (it knows the real file paths).
+  if (!window.pywebview) alert("Drag and drop works in the Clip Studio desktop app. Here, use Import instead.");
+});
 
 // ------------------------------------------------------------------ wiring
 
-$("#folder-form").addEventListener("submit", async ev => {
-  ev.preventDefault();
+$("#import").onclick = browse;
+$("#import2").onclick = browse;
+$("#recording").onchange = ev => selectRecording(ev.target.value);
+$("#analyze").onclick = async () => {
+  const v = state.videos.find(x => x.name === state.current);
+  if (!v) return;
+  if (v.scanned && !confirm("Analyze this recording again? Your trims and edits for it will be replaced.")) return;
+  try { await api("/api/analyze", { video: v.name, rescan: v.scanned }); refreshState(); } catch (e) { report(e); }
+};
+$("#status").onclick = () => { $("#tasks").hidden = !$("#tasks").hidden; renderTasks(); };
+document.addEventListener("click", ev => {
+  if (!ev.target.closest("#tasks, #status")) $("#tasks").hidden = true;
+});
+
+$("#sort").onchange = ev => { state.sort = ev.target.value; renderList(); };
+$("#show-removed").onchange = ev => { state.showRemoved = ev.target.checked; renderAll(); };
+
+$("#prev").onclick = () => step(-1);
+$("#next").onclick = () => step(1);
+$("#playclip").onclick = playClip;
+$("#playpause").onclick = () => (player.paused ? player.play() : player.pause());
+$("#add-here").onclick = async () => {
+  if (!state.current) return;
   try {
-    await api("/api/folder", { folder: $("#folder").value });
-    state.current = null;
-    $("#workspace").hidden = true;
-    $("#empty").hidden = false;
-    refreshState();
+    const row = await api("/api/add", { video: state.current, at: player.currentTime });
+    await loadClips(false);
+    selectClip(Number(row.clip));
   } catch (e) { report(e); }
-});
+};
 
-$("#filter").addEventListener("click", ev => {
-  const btn = ev.target.closest("button");
-  if (!btn) return;
-  state.filter = btn.dataset.filter;
-  for (const b of $("#filter").children) b.classList.toggle("active", b === btn);
-  applyFilter();
-});
+$("#ed-keep").onclick = () => {
+  const c = selClip();
+  save({ skip: !c.skip });
+  renderAll();
+};
+$("#ed-category").onchange = ev => { save({ category: ev.target.value }); renderAll(); };
+for (const b of $$("[data-nudge]")) {
+  b.onclick = () => {
+    const [which, d] = b.dataset.nudge.split(":");
+    setTrim(which, selClip()[which] + parseFloat(d));
+  };
+}
+$("#set-start").onclick = () => setTrim("start", player.currentTime);
+$("#set-end").onclick = () => setTrim("end", player.currentTime);
+$("#ed-caption").oninput = ev => save({ caption: ev.target.value });
+$("#ed-shuffle").onclick = async () => {
+  const c = selClip();
+  try {
+    const s = await api("/api/caption", { label: c.label, tone: c.tone });
+    save({ caption: s.caption, tone: s.tone });
+    $("#ed-caption").value = s.caption;
+  } catch (e) { report(e); }
+};
+$("#ed-music").onchange = ev => save({ music: ev.target.value });
+$("#ed-game").oninput = ev => { save({ game_volume: Number(ev.target.value) }); renderEditor(); };
+$("#ed-musicvol").oninput = ev => { save({ music_volume: Number(ev.target.value) }); renderEditor(); };
+for (const b of $$("#ed-framing button")) b.onclick = () => { save({ framing: b.dataset.framing }); renderEditor(); };
+$("#ed-cropx").oninput = ev => { save({ crop_x: Number(ev.target.value) }); renderEditor(); };
 
-$("#render-all").addEventListener("click", async () => {
-  const kept = state.clips.filter(c => !c.skip).map(c => c.clip);
-  if (!kept.length) return;
-  try { await api("/api/render", { video: state.current, clips: kept }); refreshState(); }
-  catch (e) { report(e); }
-});
+$("#ed-export").onclick = async () => {
+  const c = selClip();
+  try { await api("/api/export", { video: state.current, clips: [c.clip] }); refreshState(); } catch (e) { report(e); }
+};
+$("#ed-watch").onclick = () => openModal(selClip().rendered);
+$("#export-kept").onclick = async () => {
+  const kept = visibleClips().filter(c => !c.skip).map(c => c.clip);
+  try { await api("/api/export", { video: state.current, clips: kept }); refreshState(); } catch (e) { report(e); }
+};
+$("#compile").onclick = async () => {
+  const kept = state.clips.filter(c => !c.skip && !state.hidden.has(c.category))
+    .sort((a, b) => a.anchor - b.anchor).map(c => c.clip);
+  if (!confirm(`Join ${kept.length} kept clips (in recording order) into one highlight video?`)) return;
+  try { await api("/api/compile", { video: state.current, clips: kept }); refreshState(); } catch (e) { report(e); }
+};
+$("#open-folder").onclick = () => api("/api/open", { video: state.current }).catch(report);
 
-$("#modal-close").addEventListener("click", closeModal);
+function openModal(url) {
+  $("#modal-video").src = url;
+  $("#modal").hidden = false;
+  player.pause();
+  $("#modal-video").play().catch(() => {});
+}
+function closeModal() { $("#modal-video").pause(); $("#modal").hidden = true; }
+$("#modal-close").onclick = closeModal;
 $("#modal").addEventListener("click", ev => { if (ev.target.id === "modal") closeModal(); });
-document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeModal(); });
+
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape") return closeModal();
+  if (typing() || !selClip()) return;
+  const k = ev.key.toLowerCase();
+  if (k === " ") { ev.preventDefault(); player.paused ? player.play() : player.pause(); }
+  else if (k === "arrowdown") { ev.preventDefault(); step(1); }
+  else if (k === "arrowup") { ev.preventDefault(); step(-1); }
+  else if (k === "p") playClip();
+  else if (k === "i") setTrim("start", player.currentTime);
+  else if (k === "o") setTrim("end", player.currentTime);
+  else if (k === "delete" || k === "backspace") $("#ed-keep").click();
+});
 
 refreshState();
 setInterval(refreshState, 1500);

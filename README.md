@@ -11,7 +11,7 @@ Point it at your Rocket League recordings and it finds the best plays and saves 
 ## 1. Setup (Windows, one time)
 
 1. Download this repo (green **Code** button > **Download ZIP**) and unzip it somewhere, e.g. `Documents\rl-clipper`.
-2. Double-click **`setup.bat`**. It installs ffmpeg and Python if needed. If it asks, close the window and run it again.
+2. Double-click **`setup.bat`**. It installs ffmpeg and Python if needed and creates the **Clip Studio** desktop shortcut. If it asks, close the window and run it again.
 3. **Older recordings with your voice mixed in:** also run **`setup-voice-removal.bat`** (large download).
 4. **Music:** drop tracks into `music\hype`, `music\funny` and `music\chill` (see `music\README.md` for copyright-safe sources).
 
@@ -27,21 +27,29 @@ Then new recordings won't need AI voice removal and the game audio stays perfect
 
 Track 1 is then game-only, and the clipper picks it automatically.
 
-## 3. Clip Studio (recommended)
+## 3. Clip Studio (the app)
 
-Double-click **`app.bat`**. Clip Studio opens in your browser. It runs on your PC only, and you need to keep the black window open while using it.
+Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or double-click `Clip Studio.vbs` in this folder. It opens in its own window with no console, and all the work runs in the background, with progress shown in the status meter at the top right. Everything stays on your PC.
 
-1. Paste your recordings folder at the top (e.g. `C:\Users\you\Videos\Rocket League`) and click **Open**.
-2. Click **Scan** next to a recording. The progress bar shows how far along it is.
-3. Each play it finds becomes a card with a preview that includes 10 extra seconds on both sides:
-   - **Trim:** drag the blue handles. The yellow line marks the play. Use **−/+** to nudge by half a second, or pause the video and click **Start here** / **End here**.
-   - **Play clip** plays just the trimmed part.
-   - **Caption:** type your own, or click 🎲 for another from the library.
-   - **Music:** leave it on Auto, or pick a song.
-   - **Kept / Discarded:** drop the clips you don't want.
-4. Click **Render** on a card, or **Render kept clips** to render them all. Then **Watch final** shows the finished vertical clip.
+**Import → Analyze → Review → Edit → Export**
 
-Finished clips still go to `output\<video name>\vertical\`.
+1. **Import:** drag a recording onto the window, or click **Import** to browse. Analysis starts on its own.
+2. **Analyze:** Clip Studio reads the game's popups, listens for goal explosions, and picks up reactions on your mic track. A reaction right after a play stays in that clip, and replays don't become separate clips.
+3. **Review:** suggested clips appear on the left, labeled **Goal, Aerial, Save, Demo, Assist, Funny Moment, Fail?** with the reason each was picked.
+   - Click a category chip to hide or show that type.
+   - **Fail?** clips (someone else scored) start out removed. Tick **Show removed** to see them.
+   - Missed something? Scrub the **Whole recording** bar and click **+ Add moment here**.
+4. **Edit** (right panel):
+   - **Timing:** drag the blue edges on the clip timeline, nudge with **−/+**, or set the start or end at the playhead.
+   - **Caption** (🎲 gives another one), **Music**, **Game/Music volume**, and **Framing** (Full view or Zoom to fill, with a position slider).
+   - **Kept / Removed** decides whether the clip gets exported.
+5. **Export:** **Export this clip** saves a single clip. **Export kept clips** saves all of them. **Build highlight video** joins the kept clips into one video.
+
+Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** remove/keep.
+
+Exports go to `output\<recording name>\vertical\`. Highlight videos go to `output\<recording name>\`. The **Open output folder** link takes you there.
+
+MKV recordings can be analyzed and exported, but they can't be previewed in the player. Use OBS **File → Remux Recordings** to make an MP4.
 
 ## 4. Make clips without the app
 

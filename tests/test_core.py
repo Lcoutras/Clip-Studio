@@ -80,3 +80,20 @@ def test_library_and_ai_caption(tmp_path, monkeypatch):
     assert out == "Sent to the moon"
     assert calls["model"] == "claude-opus-5-5"
     assert sum(1 for c in calls["messages"][0]["content"] if c["type"] == "image") == 4
+
+
+def test_reactions_extend_plays_and_make_funny_moments():
+    det = config.load()["detection"]
+    ocr = [detect.Event(100.0, "GOAL", 7, "hype", "ocr", "GOAL +100")]
+    reactions = [(103.0, 20.0), (300.0, 22.0)]   # one right after the goal, one on its own
+    found = highlights.build(ocr, [(100.0, 25.0)], [], det, 600, reactions)
+    goal, funny = found
+    assert goal.category == "Goal" and goal.end == round(103.0 + det["reaction_tail"], 2)
+    assert "reaction" in goal.reason and "goal explosion" in goal.reason
+    assert funny.category == "Funny Moment" and funny.label == "FUNNY MOMENT"
+
+
+def test_other_players_goal_is_a_possible_fail():
+    assert detect.other_scorer("e! e! 2000800 AYYR0N7321SC0RED! GOAL!".split(" "), ["postmates85"])
+    assert not detect.other_scorer("[ALM] AERIALGOAL +20 POSTMATES85SC0RED!".split(" "), ["postmates85"])
+    assert highlights.category_of("FAIL?") == "Fail?"

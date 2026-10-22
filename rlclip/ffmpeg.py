@@ -1,10 +1,15 @@
 """Thin wrappers around the ffmpeg / ffprobe command-line tools."""
 
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+
+# Stops a console window flashing up for every ffmpeg call when the desktop app runs.
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
 class FFmpegError(RuntimeError):
@@ -33,7 +38,7 @@ class VideoInfo:
 def probe(path) -> VideoInfo:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)],
-        capture_output=True, text=True,
+        capture_output=True, text=True, creationflags=NO_WINDOW,
     )
     if out.returncode != 0:
         raise FFmpegError(f"ffprobe could not read {path}:\n{out.stderr}")
@@ -56,7 +61,7 @@ def probe(path) -> VideoInfo:
 def run(args, quiet=True):
     """Run ffmpeg with the given arguments (without the leading 'ffmpeg')."""
     cmd = ["ffmpeg", "-hide_banner", "-y", "-loglevel", "error" if quiet else "info", *map(str, args)]
-    out = subprocess.run(cmd, capture_output=True, text=True)
+    out = subprocess.run(cmd, capture_output=True, text=True, creationflags=NO_WINDOW)
     if out.returncode != 0:
         raise FFmpegError("ffmpeg failed:\n" + " ".join(cmd) + "\n" + out.stderr[-3000:])
 
@@ -64,7 +69,8 @@ def run(args, quiet=True):
 def pipe(args):
     """Start ffmpeg writing raw data to stdout; caller reads proc.stdout."""
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", *map(str, args)]
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**7)
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**7,
+                            creationflags=NO_WINDOW)
 
 
 def read_audio(path, track=0, rate=8000, start=None, duration=None):

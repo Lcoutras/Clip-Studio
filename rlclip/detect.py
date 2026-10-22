@@ -123,6 +123,17 @@ def classify_frame(texts, player_names=()):
     return accepted
 
 
+def other_scorer(texts, player_names=()):
+    """True when the frame shows the goal banner for somebody else's goal (a possible fail)."""
+    if not texts or len(texts) > 12 or not player_names:
+        return False
+    raw = " ".join(texts).upper()
+    if any(marker in raw for marker in MENU_MARKERS):
+        return False
+    folded = _fold(raw)
+    return "SCORED" in folded and not any(_fold(n) in folded for n in player_names if n)
+
+
 # ---------------------------------------------------------------- audio
 
 def audio_peaks(path, track, threshold_db, hop=0.05):
@@ -233,6 +244,9 @@ def ocr_events(info, det, progress=True, on_progress=None):
             if mine and "GOAL" in kw:
                 weight += 2
             events.append(Event(max(0.0, t - det["ocr_delay"]), label, weight, mood, "ocr", " ".join(texts)))
+        if other_scorer(texts, names) and t - last_seen.get("OTHER", -99) >= 8:
+            last_seen["OTHER"] = t
+            events.append(Event(max(0.0, t - det["ocr_delay"]), "FAIL?", 5, "funny", "ocr", " ".join(texts)))
         if on_progress and i % max(1, int(10 * fps)) == 0:
             on_progress(min(100.0, 100 * t / info.duration), len(events))
         if progress and i % int(60 * fps) == 0:
