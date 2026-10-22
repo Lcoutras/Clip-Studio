@@ -10,6 +10,8 @@ from pathlib import Path
 
 # Stops a console window flashing up for every ffmpeg call when the desktop app runs.
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+# Heavy decoding/encoding runs at below-normal priority so the PC and the app stay responsive.
+BACKGROUND = NO_WINDOW | (subprocess.BELOW_NORMAL_PRIORITY_CLASS if os.name == "nt" else 0)
 
 
 class FFmpegError(RuntimeError):
@@ -61,7 +63,7 @@ def probe(path) -> VideoInfo:
 def run(args, quiet=True):
     """Run ffmpeg with the given arguments (without the leading 'ffmpeg')."""
     cmd = ["ffmpeg", "-hide_banner", "-y", "-loglevel", "error" if quiet else "info", *map(str, args)]
-    out = subprocess.run(cmd, capture_output=True, text=True, creationflags=NO_WINDOW)
+    out = subprocess.run(cmd, capture_output=True, text=True, creationflags=BACKGROUND)
     if out.returncode != 0:
         raise FFmpegError("ffmpeg failed:\n" + " ".join(cmd) + "\n" + out.stderr[-3000:])
 
@@ -70,7 +72,7 @@ def pipe(args):
     """Start ffmpeg writing raw data to stdout; caller reads proc.stdout."""
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", *map(str, args)]
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=10**7,
-                            creationflags=NO_WINDOW)
+                            creationflags=BACKGROUND)
 
 
 def read_audio(path, track=0, rate=8000, start=None, duration=None):

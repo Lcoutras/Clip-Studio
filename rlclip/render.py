@@ -59,7 +59,7 @@ def _demucs(src, dst, workdir):
     out = workdir / "demucs"
     result = subprocess.run([sys.executable, "-m", "demucs", "--two-stems=vocals", "-n", "htdemucs",
                              "-o", str(out), str(src)], capture_output=True, text=True,
-                            creationflags=ffmpeg.NO_WINDOW)
+                            creationflags=ffmpeg.BACKGROUND)
     stem = out / "htdemucs" / src.stem / "no_vocals.wav"
     if result.returncode != 0 or not stem.exists():
         raise RuntimeError("Voice removal (demucs) failed:\n" + result.stderr[-2000:])

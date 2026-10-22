@@ -23,23 +23,27 @@ def _log_to_file(cfg):
 
 
 class Api:
-    """Functions the page can call as window.pywebview.api.<name>()."""
+    """Functions the page can call as window.pywebview.api.<name>().
 
-    def __init__(self, studio):
-        self.studio = studio
-        self.window = None
+    pywebview exposes every public attribute of this object to the page and walks into
+    objects it finds. Anything that isn't a function for the page must start with "_",
+    or pywebview crawls the whole native window and freezes.
+    """
+
+    def __init__(self, window=None):
+        self._window = window
 
     def browse(self):
         import webview
         types = ("Videos (*.mp4;*.mkv;*.mov;*.flv;*.ts;*.webm;*.avi)", "All files (*.*)")
         kind = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
-        paths = self.window.create_file_dialog(kind, allow_multiple=True, file_types=types)
+        paths = self._window.create_file_dialog(kind, allow_multiple=True, file_types=types)
         return list(paths or [])
 
     def browse_folder(self):
         import webview
         kind = webview.FileDialog.FOLDER if hasattr(webview, "FileDialog") else webview.FOLDER_DIALOG
-        paths = self.window.create_file_dialog(kind)
+        paths = self._window.create_file_dialog(kind)
         return list(paths or [])
 
 
@@ -68,9 +72,20 @@ def _attach_drop(window, studio):
         traceback.print_exc()
 
 
+def _below_normal_priority():
+    """Text reading (OCR) runs inside this process; keep it from starving the rest of the PC.
+    The app's window is drawn by separate WebView2 processes, so it stays smooth."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    below_normal = 0x00004000
+    ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), below_normal)
+
+
 def main(cfg, windowed=True):
     if sys.stdout is None or sys.executable.lower().endswith("pythonw.exe"):
         _log_to_file(cfg)
+    _below_normal_priority()
     studio, url = app.start_server(cfg)
     print(f"Clip Studio backend at {url}")
     try:
@@ -85,10 +100,10 @@ def main(cfg, windowed=True):
                 time.sleep(3600)
         except KeyboardInterrupt:
             return
-    api = Api(studio)
+    api = Api()
     window = webview.create_window("Clip Studio", url, width=1500, height=940, min_size=(1100, 680),
                                    js_api=api, background_color="#0f1115", text_select=True)
-    api.window = window
+    api._window = window
     window.events.loaded += lambda: threading.Thread(target=_attach_drop, args=(window, studio),
                                                      daemon=True).start()
     webview.start()
