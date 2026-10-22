@@ -10,7 +10,7 @@ from pathlib import Path
 from . import captions, config, detect, ffmpeg, highlights, music, render
 
 # Bump when detection changes enough that old results should be thrown away.
-DETECTION_VERSION = 3
+DETECTION_VERSION = 4
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
@@ -52,6 +52,28 @@ class Project:
         return self._info
 
     # ------------------------------------------------------------ step 1
+    def audio_warnings(self, game_track):
+        """Plain-language problems with the recording's audio tracks."""
+        info = self.info
+        if not info.audio_tracks:
+            return ["This recording has no audio, so clips will only have music."]
+        levels = [detect.track_loudness(self.video, t) for t in range(info.audio_tracks)]
+        print("  audio tracks: " + ", ".join(f"track {i + 1}: {db:.0f} dB" for i, db in enumerate(levels)))
+        if levels[game_track] < -60:
+            if info.audio_tracks > 1:
+                return [f"Audio track {game_track + 1} (the game sound) is silent in this recording, so "
+                        "clips will have no game sound. In OBS, check Edit > Advanced Audio Properties: "
+                        "the source that captures Rocket League needs Track 1 ticked."]
+            return ["This recording's audio is silent, so clips will have no game sound."]
+        return []
+
+    def warnings(self):
+        try:
+            with open(self.highlights_path, encoding="utf-8") as f:
+                return json.load(f).get("warnings", [])
+        except (OSError, ValueError, AttributeError):
+            return []
+
     def load_highlights(self):
         """Saved highlights, or None if missing or made by an older version of the detector."""
         try:
@@ -78,7 +100,10 @@ class Project:
         track = self.cfg["audio"]["game_track"] if info.audio_tracks > 1 else 0
         peaks = detect.audio_peaks(self.video, track, det["audio_peak_db"]) if info.audio_tracks else []
         print(f"  audio: {len(peaks)} loud moments")
-        ocr = detect.ocr_events(info, det, on_progress=on_progress)
+        timeline = []
+        ocr = detect.ocr_events(info, det, on_progress=on_progress, timeline=timeline)
+        is_gameplay = detect.gameplay_checker(timeline)
+        warnings = self.audio_warnings(track)
         # Reactions: your mic track when voices are recorded separately, otherwise loud moments
         # in the mixed audio that aren't the goal explosion itself.
         voice = self.cfg["audio"]["voice_track"]
@@ -94,7 +119,7 @@ class Project:
         if marker_file.exists():
             markers = detect.read_markers(marker_file)
             print(f"  markers: {len(markers)} from {marker_file.name}")
-        found = highlights.build(ocr, peaks, markers, det, info.duration, reactions, mixed)
+        found = highlights.build(ocr, peaks, markers, det, info.duration, reactions, mixed, is_gameplay)
         data = [h.to_dict() for h in found]
         # Old clips and captions belong to the old detection; clear them only now, so a cancelled
         # or failed analysis leaves the previous results alone.
@@ -103,7 +128,9 @@ class Project:
         self.csv_path.unlink(missing_ok=True)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         with open(self.highlights_path, "w", encoding="utf-8") as f:
-            json.dump({"version": DETECTION_VERSION, "highlights": data}, f, indent=1)
+            json.dump({"version": DETECTION_VERSION, "highlights": data, "warnings": warnings}, f, indent=1)
+        for w in warnings:
+            print(f"  ! {w}")
         print(f"  picked {len(data)} highlights")
         return data
 

@@ -97,3 +97,16 @@ def test_other_players_goal_is_a_possible_fail():
     assert detect.other_scorer("e! e! 2000800 AYYR0N7321SC0RED! GOAL!".split(" "), ["postmates85"])
     assert not detect.other_scorer("[ALM] AERIALGOAL +20 POSTMATES85SC0RED!".split(" "), ["postmates85"])
     assert highlights.category_of("FAIL?") == "Fail?"
+
+
+def test_reactions_in_menus_are_ignored():
+    """Talking in the main menu once became a 'Funny Moment' clip of the menu."""
+    det = config.load()["detection"]
+    menu = [(t, 3.0) for t in range(0, 60)]          # menu: barely moves (real menu measured 2.6-6)
+    match = [(t, 30.0) for t in range(60, 120)]       # match: the camera is always moving
+    is_gameplay = detect.gameplay_checker(menu + match)
+    reactions = [(30.0, 25.0), (90.0, 25.0)]
+    fails = [detect.Event(40.0, "FAIL?", 5, "funny", "ocr"), detect.Event(100.0, "FAIL?", 5, "funny", "ocr")]
+    found = highlights.build(fails, [], [], det, 200, reactions, is_gameplay=is_gameplay)
+    assert all(h.anchor >= 60 for h in found)
+    assert {h.category for h in found} == {"Funny Moment", "Fail?"}

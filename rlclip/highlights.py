@@ -77,9 +77,15 @@ def _reason(group, reactions_db, mixed_audio=False):
     return text[0].upper() + text[1:]
 
 
-def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio=False):
-    """reactions: [(time, jump_db)] from the mic track (or the mixed audio if mixed_audio)."""
-    reactions = list(reactions or [])
+def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio=False, is_gameplay=None):
+    """reactions: [(time, jump_db)] from the mic track (or the mixed audio if mixed_audio).
+
+    is_gameplay(t): whether a match is being played at t. Reactions and other players' goals
+    outside gameplay (menus, lobby, loading screens) are ignored: shouting in the menu isn't a clip.
+    """
+    is_gameplay = is_gameplay or (lambda t: True)
+    reactions = [(t, db) for t, db in reactions or [] if is_gameplay(t)]
+    ocr_events = [e for e in ocr_events if e.label != "FAIL?" or is_gameplay(e.time)]
     events = []
     for e in ocr_events:
         e.time, jump_db = _refine_with_audio(e, peaks)

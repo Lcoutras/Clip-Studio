@@ -191,6 +191,8 @@ class Studio:
             job.update(progress=96, message="Writing captions...")
             proj.write_captions(found, recaption=True)
             job["message"] = f"Found {len(found)} suggested clips"
+            if proj.warnings():
+                job["message"] += " (see the warning above the clip list)"
         return self.submit("analyze", name, run)
 
     def export(self, name, clips):
@@ -254,7 +256,7 @@ class Studio:
     def clips(self, name):
         proj = self.project(name)
         if not proj.csv_path.exists():
-            return {"clips": [], "source": "/source/" + _quote(name)}
+            return {"clips": [], "source": "/source/" + _quote(name), "warnings": []}
         layout = self.formats()[0]
         result = []
         for row in proj.read_rows():
@@ -270,7 +272,7 @@ class Studio:
                 "rendered": self.media_url(rendered) + f"?v={int(rendered.stat().st_mtime)}"
                 if rendered.exists() else None,
             })
-        return {"clips": result, "source": "/source/" + _quote(name)}
+        return {"clips": result, "source": "/source/" + _quote(name), "warnings": proj.warnings()}
 
     def update_clip(self, name, clip, fields):
         proj = self.project(name)

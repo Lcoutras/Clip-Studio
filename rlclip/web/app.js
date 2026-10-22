@@ -179,6 +179,7 @@ async function loadClips(resetSource) {
   try { data = await api(`/api/clips?video=${encodeURIComponent(state.current)}`); }
   catch (e) { return report(e); }
   state.clips = data.clips;
+  renderWarnings(data.warnings);
   if (resetSource || state.source !== data.source) {
     state.source = data.source;
     $("#player-msg").hidden = true;
@@ -203,6 +204,17 @@ function visibleClips() {
   return state.sort === "score"
     ? list.sort((a, b) => (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0))
     : list.sort((a, b) => a.anchor - b.anchor);
+}
+
+function renderWarnings(list) {
+  const box = $("#warnings");
+  box.innerHTML = "";
+  for (const w of list || []) {
+    const p = document.createElement("p");
+    p.textContent = "\u26A0 " + w;
+    box.appendChild(p);
+  }
+  box.hidden = !(list && list.length);
 }
 
 function renderAll() {

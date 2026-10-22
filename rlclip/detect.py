@@ -213,8 +213,17 @@ def _scan_geometry(info, region, width):
     return cw, ch, cx, cy, ow, oh
 
 
-def ocr_events(info, det, progress=True, on_progress=None):
-    """Scan the whole recording for stat-feed popups."""
+# Average change between samples a second apart. Menus, lobbies and loading screens barely
+# move (measured 2.6-6 on a real Rocket League menu); a match, where the camera follows the
+# ball, changes far more.
+GAMEPLAY_MOTION = 9.0
+
+
+def ocr_events(info, det, progress=True, on_progress=None, timeline=None):
+    """Scan the whole recording for stat-feed popups.
+
+    If `timeline` is a list, (time, motion) is appended for every sample; see is_gameplay().
+    """
     fps = det["ocr_fps"]
     cw, ch, cx, cy, ow, oh = _scan_geometry(info, det["ocr_region"], det["ocr_width"])
     vf = f"fps={fps},crop={cw}:{ch}:{cx}:{cy},scale={ow}:{oh}"
@@ -241,6 +250,10 @@ def ocr_events(info, det, progress=True, on_progress=None):
             skipped += 1
         else:
             lines = _ocr_lines(engine, img)
+        if timeline is not None:
+            # Motion per second, so Fast mode (a sample every 2s) uses the same scale.
+            motion = 99.0 if prev_thumb is None else float(np.abs(thumb - prev_thumb).mean()) * fps
+            timeline.append((t, motion))
         prev_thumb, prev_lines = thumb, lines
         texts = [text for text, conf in lines if conf >= det["ocr_min_confidence"]]
         for kw, mine in classify_frame(texts, names):
@@ -286,6 +299,28 @@ def ocr_frame(info, det, at):
     import cv2
     crop = cv2.resize(full[cy:cy + ch, cx:cx + cw], (ow, oh))
     return full, _ocr_lines(_ocr_engine(), crop), (cx, cy, cw, ch)
+
+
+def gameplay_checker(timeline):
+    """Returns is_gameplay(t): True when the footage around t is moving like a match."""
+    import bisect
+    times = [t for t, _ in timeline]
+
+    def is_gameplay(t):
+        lo, hi = bisect.bisect_left(times, t - 3), bisect.bisect_right(times, t + 1)
+        window = sorted(m for _, m in timeline[lo:hi])
+        if not window:
+            return True  # nothing known about that moment
+        return window[len(window) // 2] >= GAMEPLAY_MOTION
+    return is_gameplay
+
+
+def track_loudness(path, track):
+    """Overall loudness of one audio track in dB (about -90 means silent)."""
+    samples = ffmpeg.read_audio(path, track=track, rate=2000)
+    if samples.size == 0:
+        return -120.0
+    return float(20 * np.log10(np.sqrt((samples ** 2).mean()) + 1e-6))
 
 
 # ---------------------------------------------------------------- markers
