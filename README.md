@@ -49,7 +49,7 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 
 **Cancel and remove:** the **Cancel** button next to the status meter stops the running task. In the task list (click the status meter), every waiting or running task has its own Cancel/Remove button. **Remove** next to Analyze takes a recording off the list. Your video file and any exported clips stay on your PC. Cancelling a re-analysis keeps the previous results.
 
-**Updates:** when a new version is published, a green **⬆ Update to …** button appears at the top. Click it and Clip Studio downloads the update and restarts. Your clips, music, fonts and `config.yaml` are kept. You can also check yourself from the task list (**Check for updates**).
+**Updates:** when a new version is published, a green **⬆ Update to …** button appears at the top. Click it and Clip Studio downloads the update and restarts. Your clips, music, fonts and `settings.yaml` are kept. You can also check yourself from the task list (**Check for updates**).
 
 Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** remove/keep.
 
@@ -67,7 +67,7 @@ raw\         the unedited play, voices removed
 captions.csv the caption/music sheet (see below)
 ```
 
-A 1-hour recording takes roughly 10–20 minutes to scan on a typical PC, then about 30 seconds per clip to render. Set `encoder: h264_nvenc` in `config.yaml` on an NVIDIA GPU for much faster renders.
+A 1-hour recording takes roughly 10–20 minutes to scan on a typical PC, then about 30 seconds per clip to render. Set `encoder: h264_nvenc` under `render:` in `settings.yaml` on an NVIDIA GPU for much faster renders.
 
 ### Change captions, music or timing
 
@@ -104,7 +104,7 @@ Each clip then gets an AI caption in `caption` and a library caption in `alt_cap
 
 ## 6. Tuning
 
-All settings live in `config.yaml`, with comments. The ones you'll use most:
+Your own settings go in `settings.yaml` (create it next to `README.md`). List only what you want to change; `settings.example.yaml` shows every option with its default. Updates never touch `settings.yaml`. The ones you'll use most:
 
 | Want | Change |
 |---|---|

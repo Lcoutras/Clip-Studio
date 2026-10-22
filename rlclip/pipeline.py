@@ -17,6 +17,24 @@ CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "t
               "framing", "crop_x"]
 
 
+HASHTAGS = {
+    "Goal": "#rocketleaguegoals", "Aerial": "#rocketleaguemechanics", "Save": "#rocketleaguesaves",
+    "Demo": "#rocketleaguedemo", "Assist": "#rocketleague3v3", "Funny Moment": "#rocketleaguefunny",
+    "Fail?": "#rocketleaguefails", "Manual": "#rocketleagueclips",
+}
+
+
+def post_text(row):
+    """A title and hashtags to paste when posting. Search terms first: TikTok and YouTube
+    are searched like search engines (see docs/content-playbook.md)."""
+    category = row.get("category") or "Manual"
+    caption = (row.get("caption") or "").strip()
+    title = f"{caption} | Rocket League {category.rstrip('?')}" if caption else f"Rocket League {category}"
+    tags = " ".join(["#rocketleague", HASHTAGS.get(category, "#rocketleagueclips"), "#rocketleagueclips",
+                     "#gaming", "#shorts"])
+    return f"{title}\n\n{tags}\n"
+
+
 def is_skipped(row):
     return str(row.get("skip") or "").strip().lower() in ("y", "yes", "x", "1", "true")
 
@@ -262,11 +280,12 @@ class Project:
             video, game = render.extract(self.info, start, end, work, mode, cfg["audio"]["game_track"])
 
             track = None
-            if row.get("music"):
+            no_music = (row.get("music") or "").strip().lower() == "none"
+            if row.get("music") and not no_music:
                 track = library.find(row["music"].strip())
                 if track is None:
                     print(f"    ! music '{row['music']}' not found, picking one")
-            if track is None:
+            if track is None and not no_music:
                 # Funny captions get the goofy tracks; everything else follows the play type.
                 mood = "funny" if row.get("tone") == "funny" else mood_of.get(idx, "hype")
                 track = library.choose(mood)
@@ -280,6 +299,7 @@ class Project:
                 out = self.out_dir / layout / f"{name}.mp4"
                 render.render(cfg, video, game, anchor - start, layout, row["caption"], row["label"],
                               song, out, work)
+                out.with_suffix(".txt").write_text(post_text(row), encoding="utf-8")
                 made.append(out)
         shutil.rmtree(self.out_dir / "work", ignore_errors=True)
         return made

@@ -1,4 +1,8 @@
-# Rocket League Clipper settings. Anything you delete falls back to the default.
+# Every Clip Studio setting with its default value. Don't edit this file (updates replace it):
+# copy only the lines you want to change into settings.yaml, keeping the section names, e.g.
+#
+#   detection:
+#     player_names: ["YourName"]
 
 output_dir: output            # finished clips go in output/<video name>/
 
@@ -8,11 +12,11 @@ detection:
   audio_peak_db: 10           # how much louder than normal a moment must be to count as "hype"
   min_score: 5                # raise to keep only the best plays, lower to get more clips
   max_clips_per_video: 30
-  pre_seconds: 5              # seconds kept before the play
+  pre_seconds: 3.5            # seconds kept before the play (short = a stronger hook)
   post_seconds: 2             # seconds kept after the play (before the replay starts)
   merge_gap: 6                # events closer than this become one clip
   max_clip_seconds: 18
-  player_names: ["postmates85"]   # your in-game name(s); other players' goals are skipped
+  player_names: []            # your in-game name(s); other players' goals are skipped
   reaction_db: 12             # how much louder than normal your voice must get to count as a reaction
   reaction_tail: 1.5          # seconds kept after the last reaction in a clip
   hidden_categories: ["Fail?"]   # suggested but discarded by default (you can restore them in the app)

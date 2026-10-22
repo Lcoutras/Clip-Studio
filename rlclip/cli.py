@@ -20,7 +20,7 @@ def cmd_run(args, cfg, render_too=True):
         project = pipeline.Project(video, cfg)
         found = project.detect(rescan=args.rescan)
         if not found:
-            print("  no highlights found (try lowering detection.min_score in config.yaml)")
+            print("  no highlights found (try lowering detection.min_score in settings.yaml)")
             continue
         rows = project.write_captions(found, recaption=args.recaption or args.rescan)
         if render_too:
@@ -67,7 +67,7 @@ def cmd_calibrate(args, cfg):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="rlclip", description="Rocket League highlight clipper")
-    parser.add_argument("--config", help="path to config.yaml")
+    parser.add_argument("--config", help="path to a settings file (default: settings.yaml)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     def common(p):

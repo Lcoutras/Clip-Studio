@@ -1,4 +1,9 @@
-"""Loads config.yaml, filling in defaults for anything the user left out."""
+"""Settings: the defaults below, overridden by the user's own settings.yaml.
+
+settings.yaml holds only what the user changed (in-game name, watermark...). Updates replace
+the app (and these defaults) but never touch settings.yaml, so improved defaults reach everyone.
+Older installs kept every setting in config.yaml; that file is migrated once (see _migrate).
+"""
 
 import copy
 from pathlib import Path
@@ -18,7 +23,7 @@ DEFAULTS = {
         "audio_peak_db": 10,
         "min_score": 5,
         "max_clips_per_video": 30,
-        "pre_seconds": 5,
+        "pre_seconds": 3.5,
         "post_seconds": 2,
         "merge_gap": 6,
         "max_clip_seconds": 18,
@@ -83,9 +88,44 @@ def resolve(path):
     return path if path.is_absolute() else ROOT / path
 
 
+SETTINGS = "settings.yaml"
+LEGACY = "config.yaml"
+# Personal choices carried over from an old config.yaml; everything else uses the app's defaults.
+_PERSONAL = [("output_dir",), ("detection", "player_names"), ("captions", "watermark"),
+             ("captions", "source"), ("render", "format"), ("render", "encoder")]
+
+
+def _migrate(legacy, settings):
+    with open(legacy, encoding="utf-8") as f:
+        old = yaml.safe_load(f) or {}
+    keep = {}
+    for keys in _PERSONAL:
+        node = old
+        for k in keys:
+            node = node.get(k) if isinstance(node, dict) else None
+        default = DEFAULTS
+        for k in keys:
+            default = default.get(k)
+        if node is not None and node != default:
+            target = keep
+            for k in keys[:-1]:
+                target = target.setdefault(k, {})
+            target[keys[-1]] = node
+    header = ("# Your Clip Studio settings. Only list what you want different from the defaults;\n"
+              "# see settings.example.yaml for every option. Updates never change this file.\n")
+    with open(settings, "w", encoding="utf-8") as f:
+        f.write(header + (yaml.safe_dump(keep, sort_keys=False) if keep else ""))
+    legacy.replace(legacy.with_name("config.old.yaml"))
+
+
 def load(path=None):
     cfg = copy.deepcopy(DEFAULTS)
-    path = Path(path) if path else ROOT / "config.yaml"
+    if path:
+        path = Path(path)
+    else:
+        path = ROOT / SETTINGS
+        if not path.exists() and (ROOT / LEGACY).exists():
+            _migrate(ROOT / LEGACY, path)
     if path.exists():
         with open(path, encoding="utf-8") as f:
             _merge(cfg, yaml.safe_load(f) or {})

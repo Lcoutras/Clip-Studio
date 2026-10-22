@@ -47,10 +47,11 @@ def _fit(draw, text, path, max_width, start_size, max_lines):
     return font, textwrap.wrap(text, width=18)[:max_lines]
 
 
-def _draw_block(img, text, font_file, center_y, start_size, fill, max_lines=3, stroke_ratio=0.09):
+def _draw_block(img, text, font_file, center_y, start_size, fill, max_lines=3, stroke_ratio=0.09,
+                max_width=0.88):
     draw = ImageDraw.Draw(img)
     width = img.width
-    font, lines = _fit(draw, text, font_file, width * 0.88, start_size, max_lines)
+    font, lines = _fit(draw, text, font_file, width * max_width, start_size, max_lines)
     stroke = max(3, int(font.size * stroke_ratio))
     line_h = int(font.size * 1.12)
     y = center_y - line_h * len(lines) / 2
@@ -68,16 +69,19 @@ def caption_image(text, size, layout, font_file, watermark=""):
     """Full-frame transparent PNG with the caption on top (and optional watermark)."""
     w, h = size
     img = Image.new("RGBA", size, (0, 0, 0, 0))
+    # Vertical: Shorts/TikTok cover roughly the top 130px, the bottom 320-350px and ~120px on the
+    # right with their own buttons, so text stays inside the middle (see docs/content-playbook.md).
     if layout == "vertical":
         center_y, start = int(h * 0.17), 96
     else:
         center_y, start = int(h * 0.12), 72
-    _draw_block(img, text.upper(), font_file, center_y, start, (255, 255, 255, 255))
+    _draw_block(img, text.upper(), font_file, center_y, start, (255, 255, 255, 255),
+                max_width=0.78 if layout == "vertical" else 0.88)
     if watermark:
         draw = ImageDraw.Draw(img)
         font = _font(font_file, int(h * 0.024))
         tw = draw.textlength(watermark, font=font)
-        y = h * (0.9 if layout == "vertical" else 0.92)
+        y = h * (0.785 if layout == "vertical" else 0.92)
         draw.text(((w - tw) / 2, y), watermark, font=font, fill=(255, 255, 255, 190),
                   stroke_width=2, stroke_fill=(0, 0, 0, 190))
     return img
@@ -87,7 +91,8 @@ def label_image(label, size, layout, font_file):
     """Big yellow stamp ("EPIC SAVE!") shown right at the moment of the play."""
     w, h = size
     img = Image.new("RGBA", size, (0, 0, 0, 0))
-    center_y = int(h * (0.79 if layout == "vertical" else 0.8))
+    center_y = int(h * (0.68 if layout == "vertical" else 0.8))
     _draw_block(img, f"{label}!", font_file, center_y, 120 if layout == "vertical" else 96,
-                (255, 212, 0, 255), max_lines=2, stroke_ratio=0.1)
+                (255, 212, 0, 255), max_lines=2, stroke_ratio=0.1,
+                max_width=0.78 if layout == "vertical" else 0.88)
     return img

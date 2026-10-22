@@ -316,14 +316,14 @@ function renderEditor() {
   const wanted = ["", ...state.music].join("|");
   if (music.dataset.list !== wanted) {
     music.dataset.list = wanted;
-    music.innerHTML = `<option value="">Auto (matches the play)</option>`;
+    music.innerHTML = `<option value="">Auto (matches the play)</option><option value="none">No music (add a trending sound in TikTok/YouTube)</option>`;
     for (const m of state.music) {
       const o = document.createElement("option");
       o.value = m.split("/").pop();
       o.textContent = m;
       music.appendChild(o);
     }
-    if (!state.music.length) music.innerHTML = `<option value="">No music yet — add songs to the music folder</option>`;
+    if (!state.music.length) music.innerHTML = `<option value="">No music yet — add songs to the music folder</option><option value="none">No music (add a trending sound in TikTok/YouTube)</option>`;
   }
   music.value = c.music || "";
   $("#ed-game").value = c.game_volume;

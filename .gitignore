@@ -13,3 +13,5 @@ music/.drops.json
 fonts/*.ttf
 fonts/*.otf
 *_calibrate.png
+settings.yaml
+config.old.yaml

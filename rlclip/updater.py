@@ -2,7 +2,7 @@
 
 check() compares this copy's VERSION with the one on GitHub. apply() downloads the
 repository and copies the new files over this folder, leaving the user's own things alone
-(output, music, fonts, the Python environment and config.yaml), then reinstalls packages if
+(output, music, fonts, the Python environment and settings.yaml), then reinstalls packages if
 requirements.txt changed.
 """
 
@@ -17,7 +17,7 @@ from pathlib import PurePosixPath
 from . import __version__, config, ffmpeg
 
 # Top-level names an update never touches.
-KEEP = {"output", "music", "fonts", ".venv", "config.yaml", ".git"}
+KEEP = {"output", "music", "fonts", ".venv", "settings.yaml", "config.yaml", "config.old.yaml", ".git"}
 
 
 def _get(url, timeout):

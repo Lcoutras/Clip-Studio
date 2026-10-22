@@ -110,3 +110,26 @@ def test_reactions_in_menus_are_ignored():
     found = highlights.build(fails, [], [], det, 200, reactions, is_gameplay=is_gameplay)
     assert all(h.anchor >= 60 for h in found)
     assert {h.category for h in found} == {"Funny Moment", "Fail?"}
+
+
+def test_caption_library_is_short_and_valid():
+    """Short-form text should read at scroll speed: about 3-7 words (docs/content-playbook.md)."""
+    import yaml
+    with open(config.resolve("captions/library.yaml"), encoding="utf-8") as f:
+        library = yaml.safe_load(f)
+    lines = [line for section in library.values() for pool in section.values() for line in pool]
+    assert all(isinstance(line, str) for line in lines)
+    too_long = [line for line in lines if len(line.split()) > 8]
+    assert too_long == ["What a save! What a save! What a save!"]   # the quick-chat meme stays
+
+
+def test_old_config_yaml_migrates_personal_settings_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    (tmp_path / "config.yaml").write_text(
+        "detection:\n  pre_seconds: 5\n  player_names: [\"postmates85\"]\ncaptions:\n  watermark: \"@me\"\n")
+    cfg = config.load()
+    assert cfg["detection"]["player_names"] == ["postmates85"]
+    assert cfg["captions"]["watermark"] == "@me"
+    assert cfg["detection"]["pre_seconds"] == config.DEFAULTS["detection"]["pre_seconds"]  # new default wins
+    assert (tmp_path / "settings.yaml").exists() and (tmp_path / "config.old.yaml").exists()
+    assert not (tmp_path / "config.yaml").exists()
