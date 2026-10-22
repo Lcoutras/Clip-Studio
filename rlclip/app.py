@@ -10,6 +10,7 @@ import os
 import queue
 import random
 import re
+import socket
 import subprocess
 import threading
 import traceback
@@ -356,18 +357,25 @@ def make_handler(studio):
     return Handler
 
 
-def start_server(cfg, port=8765):
-    """Start the backend on a background thread. Returns (studio, url)."""
+class _Server(ThreadingHTTPServer):
+    # Never share a port: on Windows, address reuse lets a second server bind a port an older
+    # copy of the app still holds, and requests then reach the wrong (old) server.
+    allow_reuse_address = False
+    daemon_threads = True
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
+def start_server(cfg, port=0):
+    """Start the backend on a background thread. Returns (studio, url).
+
+    port=0 lets Windows pick a free port, so old or duplicate copies can't collide.
+    """
     studio = Studio(cfg)
-    server = None
-    for p in range(port, port + 30):
-        try:
-            server = ThreadingHTTPServer(("127.0.0.1", p), make_handler(studio))
-            port = p
-            break
-        except OSError:
-            continue
-    if server is None:
-        raise RuntimeError("Could not find a free port for Clip Studio")
+    server = _Server(("127.0.0.1", port), make_handler(studio))
+    port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return studio, f"http://127.0.0.1:{port}/"
