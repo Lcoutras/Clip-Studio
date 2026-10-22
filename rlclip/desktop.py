@@ -86,7 +86,7 @@ def main(cfg, windowed=True):
     if sys.stdout is None or sys.executable.lower().endswith("pythonw.exe"):
         _log_to_file(cfg)
     _below_normal_priority()
-    studio, url = app.start_server(cfg)
+    studio, url = app.start_server(cfg, windowed=windowed)
     print(f"Clip Studio backend at {url}")
     try:
         import webview

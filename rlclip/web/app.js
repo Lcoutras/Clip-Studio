@@ -50,9 +50,10 @@ async function refreshState() {
   let data;
   try { data = await api("/api/state"); } catch { return; }
   Object.assign(state, { videos: data.videos, jobs: data.jobs, music: data.music,
-                         categories: data.categories, format: data.format });
+                         categories: data.categories, format: data.format, version: data.version });
   renderRecordings();
   renderStatus();
+  renderUpdate(data.update);
   for (const job of data.jobs) {
     const before = jobStatus.get(job.id);
     jobStatus.set(job.id, job.status);
@@ -63,6 +64,11 @@ async function refreshState() {
         else softRefresh();
       }
       if (job.kind === "compile" && job.status === "done" && job.result) openModal(job.result);
+      if (job.kind === "update" && job.status === "done" && job.result === "restart") {
+        $("#restarting").hidden = false;
+        api("/api/restart", {}).catch(() => {});
+      }
+      if (job.status === "error" && job.kind !== "update") renderStatus();
     }
   }
 }
@@ -86,7 +92,7 @@ function renderRecordings() {
   if (state.current) sel.value = state.current;
   $("#welcome").hidden = state.videos.length > 0;
   $("#studio").hidden = state.videos.length === 0;
-  $("#recording").hidden = $("#analyze").hidden = state.videos.length === 0;
+  $("#recording").hidden = $("#analyze").hidden = $("#remove").hidden = state.videos.length === 0;
   if (!state.current && state.videos.length) selectRecording(state.videos[0].name);
   const v = state.videos.find(x => x.name === state.current);
   const busy = busyJob(state.current, "analyze");
@@ -101,6 +107,8 @@ function busyJob(name, kind) {
 
 function renderStatus() {
   const running = state.jobs.find(j => j.status === "running");
+  $("#cancel").hidden = !running || running.kind === "update";
+  $("#cancel").disabled = Boolean(running?.cancel);
   const queued = state.jobs.filter(j => j.status === "queued").length;
   const lastErr = [...state.jobs].reverse().find(j => j.status === "error");
   const btn = $("#status");
@@ -117,16 +125,23 @@ function renderStatus() {
 }
 
 function renderTasks() {
-  const box = $("#tasks");
+  const box = $("#task-list");
   box.innerHTML = state.jobs.length ? "" : `<div class="muted">No tasks yet.</div>`;
   for (const job of [...state.jobs].reverse()) {
     const el = document.createElement("div");
-    el.className = "task" + (job.status === "error" ? " error" : "");
-    el.innerHTML = `<div><b></b> · <span class="m"></span></div><div class="bar"><div class="fill"></div></div>`;
+    el.className = `task ${job.status}`;
+    el.innerHTML = `<div class="task-row"><div><b></b> \u00b7 <span class="m"></span></div></div>
+      <div class="bar"><div class="fill"></div></div>`;
     $("b", el).textContent = `${job.kind[0].toUpperCase()}${job.kind.slice(1)} ${job.video}`;
     $(".m", el).textContent = job.status === "queued" ? "waiting" : job.message;
     $(".fill", el).style.width = `${job.progress}%`;
-    if (job.result) {
+    if (job.status === "queued" || job.status === "running") {
+      const b = document.createElement("button");
+      b.textContent = job.status === "queued" ? "Remove" : "Cancel";
+      b.onclick = ev => { ev.stopPropagation(); cancelJob(job.id); };
+      $(".task-row", el).appendChild(b);
+    }
+    if (job.result && job.result !== "restart") {
       const a = document.createElement("a");
       a.href = "#";
       a.textContent = " Watch";
@@ -135,6 +150,17 @@ function renderTasks() {
     }
     box.appendChild(el);
   }
+  $("#version").textContent = `Clip Studio ${state.version || ""}`;
+}
+
+async function cancelJob(id) {
+  try { await api("/api/cancel", { job: id }); refreshState(); } catch (e) { report(e); }
+}
+
+function renderUpdate(update) {
+  const btn = $("#update");
+  btn.hidden = !update?.available;
+  if (update?.available) btn.textContent = `\u2B06 Update to ${update.latest}`;
 }
 
 // ------------------------------------------------------------------ recordings + clips
@@ -524,8 +550,38 @@ $("#analyze").onclick = async () => {
   try { await api("/api/analyze", { video: v.name, rescan: v.scanned }); refreshState(); } catch (e) { report(e); }
 };
 $("#status").onclick = () => { $("#tasks").hidden = !$("#tasks").hidden; renderTasks(); };
+$("#cancel").onclick = () => {
+  const running = state.jobs.find(j => j.status === "running");
+  if (running) cancelJob(running.id);
+};
+$("#remove").onclick = async () => {
+  const name = state.current;
+  if (!name || !confirm(`Remove ${name} from the list?\n\nIts tasks are cancelled. The video file and any clips you exported stay on your PC.`)) return;
+  try {
+    await api("/api/remove", { video: name });
+    state.current = null;
+    state.clips = [];
+    player.removeAttribute("src");
+    player.load();
+    await refreshState();
+    if (state.current) await loadClips(true); else renderAll();
+  } catch (e) { report(e); }
+};
+$("#update").onclick = async () => {
+  const btn = $("#update");
+  if (!confirm(`Install ${btn.textContent.replace("\u2B06 Update to ", "version ")}?\n\nClip Studio restarts afterwards. Your clips, music and settings are kept.`)) return;
+  try { await api("/api/update", {}); btn.hidden = true; refreshState(); } catch (e) { report(e); }
+};
+$("#check-update").onclick = async () => {
+  try {
+    const u = await api("/api/update/check", {});
+    renderUpdate(u);
+    alert(u.available ? `Version ${u.latest} is available.` : u.latest ? `You're up to date (${u.current}).`
+      : "Couldn't check for updates right now.");
+  } catch (e) { report(e); }
+};
 document.addEventListener("click", ev => {
-  if (!ev.target.closest("#tasks, #status")) $("#tasks").hidden = true;
+  if (!ev.target.closest("#tasks, #status, #cancel")) $("#tasks").hidden = true;
 });
 
 $("#sort").onchange = ev => { state.sort = ev.target.value; renderList(); };

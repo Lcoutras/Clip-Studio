@@ -48,6 +48,11 @@ DEFAULTS = {
         "show_event_label": True,
         "watermark": "",
     },
+    # In-app updates come from this public GitHub repository.
+    "update": {
+        "repo": "lcoutras/clip-studio",
+        "branch": "main",
+    },
     "render": {
         "format": "vertical",
         "vertical_style": "blur",

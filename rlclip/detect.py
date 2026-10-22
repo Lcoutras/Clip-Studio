@@ -248,7 +248,13 @@ def ocr_events(info, det, progress=True, on_progress=None):
             last_seen["OTHER"] = t
             events.append(Event(max(0.0, t - det["ocr_delay"]), "FAIL?", 5, "funny", "ocr", " ".join(texts)))
         if on_progress and i % max(1, int(10 * fps)) == 0:
-            on_progress(min(100.0, 100 * t / info.duration), len(events))
+            try:
+                on_progress(min(100.0, 100 * t / info.duration), len(events))
+            except BaseException:
+                # The caller cancelled: stop decoding right away.
+                proc.kill()
+                proc.wait()
+                raise
         if progress and i % int(60 * fps) == 0:
             pct = min(100, 100 * t / info.duration)
             sys.stdout.write(f"\r  scanning video... {pct:5.1f}%  ({len(events)} events)")

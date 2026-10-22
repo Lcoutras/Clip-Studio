@@ -45,6 +45,10 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
    - **Kept / Removed** decides whether the clip gets exported.
 5. **Export:** **Export this clip** saves a single clip. **Export kept clips** saves all of them. **Build highlight video** joins the kept clips into one video.
 
+**Cancel and remove:** the **Cancel** button next to the status meter stops the running task. In the task list (click the status meter), every waiting or running task has its own Cancel/Remove button. **Remove** next to Analyze takes a recording off the list. Your video file and any exported clips stay on your PC. Cancelling a re-analysis keeps the previous results.
+
+**Updates:** when a new version is published, a green **⬆ Update to …** button appears at the top. Click it and Clip Studio downloads the update and restarts. Your clips, music, fonts and `config.yaml` are kept. You can also check yourself from the task list (**Check for updates**).
+
 Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** remove/keep.
 
 Exports go to `output\<recording name>\vertical\`. Highlight videos go to `output\<recording name>\`. The **Open output folder** link takes you there.

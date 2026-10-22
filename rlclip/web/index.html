@@ -12,14 +12,21 @@
   <select id="recording" title="Recording"></select>
   <button id="import" class="primary">Import</button>
   <button id="analyze">Analyze</button>
+  <button id="remove" title="Take this recording off the list (the video file is not deleted)">Remove</button>
   <div class="spacer"></div>
+  <button id="update" class="update" hidden></button>
   <button id="status" class="status" title="Background tasks">
     <span class="status-text">Ready</span>
     <span class="status-bar"><span class="status-fill"></span></span>
   </button>
+  <button id="cancel" title="Cancel the running task" hidden>Cancel</button>
 </header>
 
-<div id="tasks" class="tasks" hidden></div>
+<div id="tasks" class="tasks" hidden>
+  <div id="task-list"></div>
+  <div class="tasks-foot muted small"><span id="version"></span> &middot; <button id="check-update" class="link">Check for updates</button></div>
+</div>
+<div id="restarting" class="restarting" hidden><div>Updating Clip Studio... it will reopen in a moment.</div></div>
 
 <div id="welcome" class="welcome">
   <div class="drop-card">

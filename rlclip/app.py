@@ -13,19 +13,31 @@ import re
 import socket
 import subprocess
 import threading
+import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import captions, config, highlights, music, pipeline
+from . import __version__, captions, config, highlights, music, pipeline, updater
 
 WEB = Path(__file__).resolve().parent / "web"
 
 
+class Cancelled(Exception):
+    pass
+
+
+def _check(job):
+    if job.get("cancel"):
+        raise Cancelled()
+
+
 class Studio:
-    def __init__(self, cfg):
+    def __init__(self, cfg, windowed=True):
         self.cfg = cfg
+        self.windowed = windowed
+        self.update = {"current": __version__, "latest": None, "available": False}
         self.out_root = config.resolve(cfg["output_dir"])
         self.out_root.mkdir(parents=True, exist_ok=True)
         self.settings_path = self.out_root / "app_settings.json"
@@ -38,6 +50,32 @@ class Studio:
         self.lock = threading.Lock()
         self.queue = queue.Queue()
         threading.Thread(target=self._worker, daemon=True).start()
+        threading.Thread(target=self._update_checker, daemon=True).start()
+
+    # ------------------------------------------------------------ updates
+    def _update_checker(self):
+        while True:
+            self.check_update()
+            time.sleep(6 * 3600)
+
+    def check_update(self):
+        try:
+            self.update = updater.check(self.cfg)
+        except Exception as e:  # offline, repo not set up yet... just try again later
+            print(f"update check failed: {e}")
+        return self.update
+
+    def install_update(self):
+        if any(j["status"] in ("queued", "running") and j["kind"] != "update" for j in self.jobs):
+            raise ValueError("Finish or cancel the current tasks first, then update")
+
+        def run(job):
+            version = updater.apply(self.cfg, on_progress=lambda m: job.update(message=m))
+            job.update(message=f"Updated to {version} - restarting...", result="restart")
+        return self.submit("update", "Clip Studio", run)
+
+    def restart(self):
+        threading.Timer(0.5, updater.restart, args=(self.windowed,)).start()
 
     # ------------------------------------------------------------ library
     def save_settings(self):
@@ -66,6 +104,8 @@ class Studio:
         return added
 
     def remove(self, name):
+        """Take a recording off the list (the video file itself is left alone)."""
+        self.cancel_video(name)
         self.settings["library"] = [p for p in self.settings["library"] if Path(p).name != name]
         self.save_settings()
 
@@ -94,16 +134,41 @@ class Studio:
     def _worker(self):
         while True:
             job, fn = self.queue.get()
+            if job["status"] == "cancelled":
+                continue
             job.update(status="running", message="Starting...")
             try:
                 fn(job)
+                _check(job)
                 job.update(status="done", progress=100)
                 job.setdefault("result", None)
                 if job["message"].endswith("..."):
                     job["message"] = "Done"
+            except Cancelled:
+                job.update(status="cancelled", message="Cancelled")
             except Exception as e:  # show any failure in the app instead of dying
+                if job.get("cancel"):
+                    job.update(status="cancelled", message="Cancelled")
+                    continue
                 traceback.print_exc()
                 job.update(status="error", message=str(e)[-400:])
+
+    def cancel(self, job_id):
+        """Stop a running task (at the next safe point) or drop a waiting one."""
+        for job in self.jobs:
+            if job["id"] == job_id and job["status"] in ("queued", "running"):
+                job["cancel"] = True
+                if job["status"] == "queued":
+                    job.update(status="cancelled", message="Cancelled")
+                else:
+                    job["message"] = "Cancelling..."
+                return job
+        raise KeyError(f"No active task {job_id}")
+
+    def cancel_video(self, name):
+        for job in self.jobs:
+            if job["video"] == name and job["status"] in ("queued", "running"):
+                self.cancel(job["id"])
 
     def analyze(self, name, rescan=False):
         def run(job):
@@ -111,10 +176,12 @@ class Studio:
             job["message"] = "Analyzing audio..."
 
             def progress(pct, events):
+                _check(job)
                 job.update(progress=round(5 + pct * 0.9, 1),
                            message=f"Analyzing gameplay... {pct:.0f}% ({events} moments)")
 
             found = proj.detect(rescan=rescan, on_progress=progress)
+            _check(job)
             job.update(progress=96, message="Writing captions...")
             proj.write_captions(found, recaption=True)
             job["message"] = f"Found {len(found)} suggested clips"
@@ -127,6 +194,7 @@ class Studio:
             done = []
 
             def on_clip(row):
+                _check(job)
                 done.append(row["clip"])
                 job.update(progress=round(100 * (len(done) - 1) / max(1, len(rows))),
                            message=f"Exporting clip {row['clip']} ({len(done)} of {len(rows)})...")
@@ -140,12 +208,16 @@ class Studio:
             proj = self.project(name)
             rows = [r for r in proj.read_rows() if int(r["clip"]) in clips and not pipeline.is_skipped(r)]
             layout = self.formats()[0]
+            _check(job)
             missing = [r for r in rows
                        if not (proj.out_dir / layout / f"{proj.output_name(r)}.mp4").exists()]
             if missing:
                 job["message"] = f"Exporting {len(missing)} clips first..."
-                proj.render_all(missing, self.formats(),
-                                on_clip=lambda r: job.update(message=f"Exporting clip {r['clip']} first..."))
+                def on_clip(r):
+                    _check(job)
+                    job["message"] = f"Exporting clip {r['clip']} first..."
+                proj.render_all(missing, self.formats(), on_clip=on_clip)
+            _check(job)
             job.update(progress=80)
             out = proj.compile([int(r["clip"]) for r in rows], layout,
                                on_progress=lambda m: job.update(message=m))
@@ -171,7 +243,7 @@ class Studio:
                 "music": [p.relative_to(lib.root).as_posix() for p in lib.tracks()],
                 "categories": highlights.CATEGORIES,
                 "hidden_categories": self.cfg["detection"].get("hidden_categories", []),
-                "format": self.formats()[0]}
+                "format": self.formats()[0], "version": __version__, "update": self.update}
 
     def clips(self, name):
         proj = self.project(name)
@@ -331,6 +403,15 @@ def make_handler(studio):
                 path = urlparse(self.path).path
                 if path == "/api/import":
                     return self._json({"added": studio.import_paths(data.get("paths", []))})
+                if path == "/api/update/check":
+                    return self._json(studio.check_update())
+                if path == "/api/update":
+                    return self._json(studio.install_update())
+                if path == "/api/restart":
+                    studio.restart()
+                    return self._json({"ok": True})
+                if path == "/api/cancel":
+                    return self._json(studio.cancel(int(data["job"])))
                 if path == "/api/remove":
                     studio.remove(data["video"])
                     return self._json({"ok": True})
@@ -369,12 +450,12 @@ class _Server(ThreadingHTTPServer):
         super().server_bind()
 
 
-def start_server(cfg, port=0):
+def start_server(cfg, port=0, windowed=True):
     """Start the backend on a background thread. Returns (studio, url).
 
     port=0 lets Windows pick a free port, so old or duplicate copies can't collide.
     """
-    studio = Studio(cfg)
+    studio = Studio(cfg, windowed)
     server = _Server(("127.0.0.1", port), make_handler(studio))
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()

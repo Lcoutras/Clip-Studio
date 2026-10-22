@@ -70,10 +70,6 @@ class Project:
             return saved
         if self.highlights_path.exists() and not rescan:
             print("  detection has been improved since this video was scanned - scanning again")
-        # Old clips and captions belong to the old detection; clear them so nothing gets mixed up.
-        for old in ("vertical", "horizontal", "raw", "work", "previews"):
-            shutil.rmtree(self.out_dir / old, ignore_errors=True)
-        self.csv_path.unlink(missing_ok=True)
         det = self.cfg["detection"]
         info = self.info
         mins = info.duration / 60
@@ -100,6 +96,11 @@ class Project:
             print(f"  markers: {len(markers)} from {marker_file.name}")
         found = highlights.build(ocr, peaks, markers, det, info.duration, reactions, mixed)
         data = [h.to_dict() for h in found]
+        # Old clips and captions belong to the old detection; clear them only now, so a cancelled
+        # or failed analysis leaves the previous results alone.
+        for old in ("vertical", "horizontal", "raw", "work", "previews"):
+            shutil.rmtree(self.out_dir / old, ignore_errors=True)
+        self.csv_path.unlink(missing_ok=True)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         with open(self.highlights_path, "w", encoding="utf-8") as f:
             json.dump({"version": DETECTION_VERSION, "highlights": data}, f, indent=1)
