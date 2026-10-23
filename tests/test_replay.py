@@ -98,3 +98,16 @@ def test_match_start_tries_utc_and_local_wall_clock(monkeypatch):
     finally:
         monkeypatch.delenv("TZ")
         time.tzset()
+
+
+def test_summary_shows_result_and_your_plays_once():
+    rep = make_replay([
+        ReplayEvent(10.5, "GOAL", "me", 1, 6, speed_kph=107),
+        ReplayEvent(50.0, "EPIC SAVE", "me", 1, 8), ReplayEvent(50.0, "SAVE", "me", 1, 4),
+        ReplayEvent(120.0, "GOAL", "them", 0, 6),
+    ])
+    rep.score = (3, 6)                     # team 1 (yours) scored 6
+    info = replay.summary(rep, ["me"])
+    assert info["result"] == "Won 6-3"
+    labels = [(e["label"], e["mine"]) for e in info["timeline"]]
+    assert labels == [("Goal", True), ("Epic Save", True), ("Goal", False)]

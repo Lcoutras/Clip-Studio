@@ -12,7 +12,7 @@ const COLORS = {
 const state = {
   videos: [], jobs: [], music: [], categories: [], format: "vertical",
   current: null, clips: [], source: null, sel: null, win: null, stopAt: null,
-  hidden: new Set(load("hiddenCats", [])), showRemoved: false, sort: "time",
+  hidden: new Set(load("hiddenCats", [])), showRemoved: false, sort: "time", replays: [], replaySel: null,
 };
 const jobStatus = new Map();
 
@@ -49,7 +49,7 @@ const typing = () => ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeEle
 async function refreshState() {
   let data;
   try { data = await api("/api/state"); } catch { return; }
-  Object.assign(state, { videos: data.videos, jobs: data.jobs, music: data.music,
+  Object.assign(state, { videos: data.videos, replays: data.replays || [], jobs: data.jobs, music: data.music,
                          categories: data.categories, format: data.format, version: data.version });
   renderRecordings();
   renderStatus();
@@ -75,29 +75,87 @@ async function refreshState() {
 
 function renderRecordings() {
   const sel = $("#recording");
-  const names = state.videos.map(v => v.name).join("|");
-  if (sel.dataset.names !== names) {
-    sel.dataset.names = names;
+  const key = state.videos.map(v => v.name).join("|") + "#" + state.replays.map(r => r.path).join("|");
+  if (sel.dataset.key !== key) {
+    sel.dataset.key = key;
     sel.innerHTML = "";
-    for (const v of state.videos) {
-      const o = document.createElement("option");
-      o.value = v.name;
-      sel.appendChild(o);
+    for (const v of state.videos) sel.add(new Option("", v.name));
+    if (state.replays.length) {
+      const group = document.createElement("optgroup");
+      group.label = "Replays";
+      for (const r of state.replays) group.appendChild(new Option("", "replay:" + r.path));
+      sel.appendChild(group);
     }
   }
   for (const o of sel.options) {
-    const v = state.videos.find(x => x.name === o.value);
-    o.textContent = `${v.name}  —  ${v.scanned ? `${v.kept} kept of ${v.clips}` : "not analyzed"}`;
+    if (o.value.startsWith("replay:")) {
+      const r = state.replays.find(x => "replay:" + x.path === o.value);
+      o.textContent = `Replay: ${r.name || r.file}${r.date ? " \u00b7 " + r.date : ""}  \u2014  ` +
+        (r.recording ? `paired with ${r.recording}` : r.date ? "needs its recording" : "reading...");
+    } else {
+      const v = state.videos.find(x => x.name === o.value);
+      o.textContent = `${v.name}  \u2014  ${v.scanned ? `${v.kept} kept of ${v.clips}` : "not analyzed"}`;
+    }
   }
-  if (state.current) sel.value = state.current;
-  $("#welcome").hidden = state.videos.length > 0;
-  $("#studio").hidden = state.videos.length === 0;
-  $("#recording").hidden = $("#analyze").hidden = $("#remove").hidden = $("#speed").hidden = state.videos.length === 0;
-  if (!state.current && state.videos.length) selectRecording(state.videos[0].name);
+  const any = state.videos.length + state.replays.length > 0;
+  sel.value = state.replaySel ? "replay:" + state.replaySel : (state.current || "");
+  $("#welcome").hidden = any;
+  $("#replay-view").hidden = !state.replaySel;
+  $("#studio").hidden = !any || Boolean(state.replaySel) || state.videos.length === 0;
+  $("#recording").hidden = $("#remove").hidden = !any;
+  $("#analyze").hidden = $("#speed").hidden = state.videos.length === 0 || Boolean(state.replaySel);
+  if (!state.current && !state.replaySel && state.videos.length) selectRecording(state.videos[0].name);
+  if (!state.current && !state.replaySel && !state.videos.length && state.replays.length) showReplay(state.replays[0].path);
+  if (state.replaySel) renderReplay();
   const v = state.videos.find(x => x.name === state.current);
   const busy = busyJob(state.current, "analyze");
   $("#analyze").textContent = busy ? "Analyzing..." : v?.scanned ? "Re-analyze" : "Analyze";
   $("#analyze").disabled = Boolean(busy);
+}
+
+function showReplay(path) {
+  state.replaySel = path;
+  player.pause();
+  renderRecordings();
+}
+
+const fmtClock = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+
+function renderReplay() {
+  const r = state.replays.find(x => x.path === state.replaySel);
+  if (!r) { state.replaySel = null; return; }
+  $("#rv-title").textContent = r.name || r.file;
+  $("#rv-sub").textContent = r.date ? `Match started ${r.date} \u00b7 ${r.result || ""}` : "Reading the replay...";
+  const st = r.stats;
+  $("#rv-stats").innerHTML = "";
+  if (st) {
+    for (const [k, label] of [["Goals", "goal"], ["Assists", "assist"], ["Saves", "save"], ["Shots", "shot"], ["Score", "score"]]) {
+      const sp = document.createElement("span");
+      const n = st[k] ?? 0;
+      sp.textContent = `${n} ${label}${n === 1 || label === "score" ? "" : "s"}`;
+      $("#rv-stats").appendChild(sp);
+    }
+  }
+  const pair = $("#rv-pair");
+  pair.className = "rv-pair " + (r.recording ? "ok" : "missing");
+  pair.textContent = r.recording ? `\u2714 Paired with ${r.recording}`
+    : r.date ? `No recording paired yet. Import or choose the video you recorded on ${r.date}.` : "";
+  $("#rv-open").hidden = !r.recording || !state.videos.some(v => v.name === r.recording);
+  $("#rv-choose").textContent = r.recording ? "Choose a different recording" : "Choose the recording of this match";
+  const ul = $("#rv-timeline");
+  ul.innerHTML = "";
+  for (const e of r.timeline || []) {
+    const li = document.createElement("li");
+    li.className = e.mine ? "mine" : "";
+    li.innerHTML = "<span></span><span></span><span></span><span></span>";
+    const [a, b, c, d] = li.children;
+    a.textContent = fmtClock(e.time);
+    b.textContent = e.mine && e.label === "Goal" ? "Your goal" : e.label;
+    c.textContent = e.mine ? "" : e.player;
+    d.textContent = e.stat;
+    ul.appendChild(li);
+  }
+  if (!(r.timeline || []).length) ul.innerHTML = `<li><span></span><span class="muted">${r.date ? "No goals or plays recorded" : "Reading..."}</span></li>`;
 }
 
 function busyJob(name, kind) {
@@ -166,7 +224,9 @@ function renderUpdate(update) {
 // ------------------------------------------------------------------ recordings + clips
 
 async function selectRecording(name) {
-  if (state.current === name) return;
+  const fromReplay = Boolean(state.replaySel);
+  state.replaySel = null;
+  if (state.current === name) { if (fromReplay) renderRecordings(); return; }
   state.current = name;
   state.sel = null;
   $("#recording").value = name;
@@ -519,9 +579,9 @@ async function importPaths(paths) {
   try {
     const res = await api("/api/import", { paths });
     if (paths.every(p => p.toLowerCase().endsWith(".replay"))) {
-      refreshState();
-      $("#tasks").hidden = false;   // show the progress: it finds the recording and re-analyzes it
-      renderTasks();
+      await refreshState();
+      const added = state.replays.find(r => paths.some(p => p.endsWith(r.file)));
+      if (added) showReplay(added.path);
       return;
     }
     await window.onImported(res.added);
@@ -531,8 +591,9 @@ async function importPaths(paths) {
 window.onImported = async names => {
   await refreshState();
   // Replays aren't recordings: they're matched in the background (see the task list).
+  const replay = state.replays.find(r => (names || []).includes(r.file));
   names = (names || []).filter(n => state.videos.some(v => v.name === n));
-  if (!names.length) { $("#tasks").hidden = false; renderTasks(); return; }
+  if (!names.length) { if (replay) showReplay(replay.path); return; }
   await selectRecording(names[0]);
   for (const name of names) {
     const v = state.videos.find(x => x.name === name);
@@ -570,7 +631,27 @@ document.addEventListener("drop", ev => {
 
 $("#import").onclick = browse;
 $("#import2").onclick = browse;
-$("#recording").onchange = ev => selectRecording(ev.target.value);
+$("#recording").onchange = ev => {
+  const v = ev.target.value;
+  if (v.startsWith("replay:")) showReplay(v.slice("replay:".length));
+  else selectRecording(v);
+};
+$("#rv-open").onclick = () => {
+  const r = state.replays.find(x => x.path === state.replaySel);
+  if (r?.recording) selectRecording(r.recording);
+};
+$("#rv-choose").onclick = async () => {
+  let paths;
+  if (window.pywebview?.api?.browse) paths = await window.pywebview.api.browse();
+  else { const p = prompt("Paste the full path of the recording of this match:"); paths = p ? [p] : []; }
+  const video = (paths || []).find(p => !p.toLowerCase().endsWith(".replay"));
+  if (!video) return;
+  try {
+    const res = await api("/api/replay/pair", { replay: state.replaySel, video });
+    await refreshState();
+    await selectRecording(res.recording);
+  } catch (e) { report(e); }
+};
 $("#analyze").onclick = async () => {
   const v = state.videos.find(x => x.name === state.current);
   if (!v) return;
@@ -584,6 +665,14 @@ $("#cancel").onclick = () => {
   if (running) cancelJob(running.id);
 };
 $("#remove").onclick = async () => {
+  if (state.replaySel) {
+    const r = state.replays.find(x => x.path === state.replaySel);
+    if (!confirm(`Remove the replay ${r?.name || r?.file} from the list? The file stays on your PC.`)) return;
+    try { await api("/api/replay/remove", { replay: state.replaySel }); } catch (e) { return report(e); }
+    state.replaySel = null;
+    await refreshState();
+    return;
+  }
   const name = state.current;
   if (!name || !confirm(`Remove ${name} from the list?\n\nIts tasks are cancelled. The video file and any clips you exported stay on your PC.`)) return;
   try {

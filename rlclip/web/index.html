@@ -142,6 +142,25 @@
   </aside>
 </div>
 
+<section id="replay-view" class="replay-view" hidden>
+  <div class="replay-card">
+    <div class="muted small">Rocket League replay</div>
+    <h1 id="rv-title"></h1>
+    <div id="rv-sub" class="muted"></div>
+    <div id="rv-stats" class="rv-stats"></div>
+    <div id="rv-pair" class="rv-pair"></div>
+    <div class="rv-actions">
+      <button id="rv-choose" class="primary">Choose the recording of this match</button>
+      <button id="rv-open" hidden>Open the paired recording</button>
+    </div>
+    <p class="muted small">A replay has the match data but no picture, so clips come from the recording of
+      the same match. Once paired, the app lines them up using the goals and analyzes the recording with
+      the replay's exact events.</p>
+    <h3>What happened</h3>
+    <ul id="rv-timeline" class="rv-timeline"></ul>
+  </div>
+</section>
+
 <div id="dropzone" class="dropzone" hidden><div>Drop to import</div></div>
 
 <div id="modal" class="modal" hidden>

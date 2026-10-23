@@ -83,7 +83,9 @@ class Project:
             return [], [], []
         info = self.info
         try:
-            found, start = replay.candidates(self.video, info.duration, rcfg.get("dirs", []), rcfg.get("files", []))
+            paired = [r for r, v in (rcfg.get("pairs") or {}).items() if Path(v) == self.video]
+            found, start = replay.candidates(self.video, info.duration, rcfg.get("dirs", []),
+                                             rcfg.get("files", []), forced=paired)
         except Exception as e:  # rrrocket missing or failing shouldn't stop the analysis
             return [], [f"Replays not used: {e}"], []
         if not found:
@@ -102,7 +104,10 @@ class Project:
                 continue
             goals = [g.time for g in rep.events if g.label == "GOAL"]
             offset, hits = None, 0
-            for prior in ([e - start for e in replay.match_starts(epoch)] if start else [None]):
+            priors = [e - start for e in replay.match_starts(epoch)] if start else []
+            if str(path) in {str(Path(r)) for r in paired}:
+                priors.append(None)   # paired by hand: also try lining up by goals alone
+            for prior in priors or [None]:
                 o, h = replay.align(goals, video_goals, prior)
                 if o is not None and 0 <= o + 30 and o < info.duration and (offset is None or h > hits):
                     offset, hits = o, h

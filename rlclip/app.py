@@ -51,6 +51,11 @@ class Studio:
         self.queue = queue.Queue()
         threading.Thread(target=self._worker, daemon=True).start()
         threading.Thread(target=self._update_checker, daemon=True).start()
+        # Replays imported before the app showed them still need reading.
+        unread = [p for p in self.settings.get("replays", [])
+                  if p not in self.settings.get("replay_info", {}) and Path(p).exists()]
+        if unread:
+            self.match_replays(unread)
 
     # ------------------------------------------------------------ updates
     def _update_checker(self):
@@ -118,26 +123,36 @@ class Studio:
             raise ValueError("No video or replay files found there (mp4, mkv, mov, replay...)")
         return added
 
+    def replay_cfg(self, cfg):
+        """cfg with the user's imported and paired replays added."""
+        return {**cfg, "replays": {**cfg.get("replays", {}), "files": self.settings.get("replays", []),
+                                   "pairs": self.settings.get("pairs", {})}}
+
     def match_replays(self, replay_paths):
-        """Background task: find which recording each new replay belongs to and analyze it."""
+        """Background task: read new replays, find the recording each belongs to and analyze it."""
         def run(job):
+            names = self.cfg["detection"].get("player_names") or []
+            infos = self.settings.setdefault("replay_info", {})
             matched, unmatched = set(), []
             for i, rp in enumerate(replay_paths):
                 job.update(progress=round(100 * i / max(1, len(replay_paths))),
                            message=f"Reading replay {Path(rp).name}...")
-                props = replay.header(rp) or {}
-                epoch = float(props.get("MatchStartEpoch") or 0)
-                hits = []
-                for video in self.library():
+                info = replay.summary(replay.load(rp, on_progress=lambda m: job.update(message=m)), names)
+                paired = self.settings.get("pairs", {}).get(rp)
+                hits = [Path(paired).name] if paired else []
+                for video in self.library() if not hits else []:
                     try:
-                        if replay.covers(video, ffmpeg.probe(video).duration, epoch):
+                        if replay.covers(video, ffmpeg.probe(video).duration, info["epoch"]):
                             hits.append(video.name)
                     except Exception:
                         continue
+                info["recording"] = hits[0] if hits else None
+                infos[rp] = info
+                self.save_settings()
                 if hits:
                     matched.update(hits)
                 else:
-                    unmatched.append(replay.describe_time(epoch) if epoch else Path(rp).name)
+                    unmatched.append(info["date"])
             for name in sorted(matched):
                 self.analyze(name, rescan=True)
             parts = []
@@ -145,9 +160,26 @@ class Studio:
                 parts.append(f"Replay matched {', '.join(sorted(matched))}, re-analyzing")
             if unmatched:
                 parts.append("No imported recording covers the match from " + ", ".join(unmatched)
-                             + ". Import the recording of that match")
+                             + ". Open the replay in the list to choose its recording")
             job["message"] = ". ".join(parts) or "Done"
         return self.submit("replay", "replays", run)
+
+    def pair_replay(self, replay_path, video_path):
+        """The user says this recording is that replay's match: remember it and analyze."""
+        name = self.import_paths([video_path])[0]
+        self.settings.setdefault("pairs", {})[replay_path] = str(self.video(name))
+        info = self.settings.setdefault("replay_info", {}).get(replay_path)
+        if info is not None:
+            info["recording"] = name
+        self.save_settings()
+        self.analyze(name, rescan=True)
+        return name
+
+    def remove_replay(self, replay_path):
+        self.settings["replays"] = [p for p in self.settings.get("replays", []) if p != replay_path]
+        self.settings.get("replay_info", {}).pop(replay_path, None)
+        self.settings.get("pairs", {}).pop(replay_path, None)
+        self.save_settings()
 
     def remove(self, name):
         """Take a recording off the list (the video file itself is left alone)."""
@@ -223,8 +255,7 @@ class Studio:
     def analyze(self, name, rescan=False, speed="standard"):
         def run(job):
             proj = self.project(name)
-            proj.cfg = {**proj.cfg, "replays": {**proj.cfg.get("replays", {}),
-                                                "files": self.settings.get("replays", [])}}
+            proj.cfg = self.replay_cfg(proj.cfg)
             if speed in self.SPEEDS:
                 proj.cfg = {**proj.cfg, "detection": {**proj.cfg["detection"], "ocr_fps": self.SPEEDS[speed]}}
             job["message"] = "Analyzing audio..."
@@ -297,7 +328,10 @@ class Studio:
             videos.append({"name": path.name, "path": str(path), "scanned": scanned,
                            "clips": len(rows), "kept": sum(1 for r in rows if not pipeline.is_skipped(r))})
         lib = music.MusicLibrary(self.cfg)
-        return {"videos": videos, "jobs": self.jobs[-30:],
+        infos = self.settings.get("replay_info", {})
+        replays = [{"path": p, "file": Path(p).name, **infos.get(p, {})}
+                   for p in self.settings.get("replays", []) if Path(p).exists()]
+        return {"videos": videos, "replays": replays, "jobs": self.jobs[-30:],
                 "music": [p.relative_to(lib.root).as_posix() for p in lib.tracks()],
                 "categories": highlights.CATEGORIES,
                 "hidden_categories": self.cfg["detection"].get("hidden_categories", []),
@@ -468,6 +502,11 @@ def make_handler(studio):
                     return self._json(studio.install_update())
                 if path == "/api/restart":
                     studio.restart()
+                    return self._json({"ok": True})
+                if path == "/api/replay/pair":
+                    return self._json({"recording": studio.pair_replay(data["replay"], data["video"])})
+                if path == "/api/replay/remove":
+                    studio.remove_replay(data["replay"])
                     return self._json({"ok": True})
                 if path == "/api/cancel":
                     return self._json(studio.cancel(int(data["job"])))

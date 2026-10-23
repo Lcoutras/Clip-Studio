@@ -250,8 +250,32 @@ def describe_time(epoch):
     return when.strftime("%b %d at %I:%M %p").replace(" 0", " ")
 
 
-def candidates(video_path, duration, dirs, extra=()):
-    """Replay files that could belong to this recording."""
+def summary(rep, player_names):
+    """What the app shows for an imported replay: result, your stats and a timeline."""
+    mine = {n.lower() for n in player_names}
+    me = next((p for p in rep.players if p.lower() in mine), None)
+    my_team = rep.players.get(me) if me else None
+    result = ""
+    if my_team in (0, 1):
+        us, them = rep.score[my_team], rep.score[1 - my_team]
+        result = f"{'Won' if us > them else 'Lost' if us < them else 'Tied'} {us}-{them}"
+    timeline = []
+    for e in rep.events:
+        is_me = e.player.lower() in mine
+        if e.label == "SAVE" and any(x.label == "EPIC SAVE" and x.player == e.player and abs(x.time - e.time) <= 1.5
+                                     for x in rep.events):
+            continue   # an epic save also counts as a save
+        if e.label == "GOAL" or (is_me and e.label in ("EPIC SAVE", "SAVE", "ASSIST", "DEMO", "POST")):
+            timeline.append({"time": round(e.time, 1), "label": e.label.title(), "player": e.player,
+                             "mine": is_me, "stat": f"{e.speed_kph:.0f} km/h" if e.speed_kph >= 20 else ""})
+    stats = next((s for s in rep.stats if (s.get("Name") or "").lower() in mine), None)
+    return {"name": rep.name, "date": describe_time(rep.match_start_epoch) if rep.match_start_epoch else rep.date,
+            "epoch": rep.match_start_epoch, "result": result or f"{rep.score[0]}-{rep.score[1]}",
+            "me": me, "stats": stats, "timeline": timeline}
+
+
+def candidates(video_path, duration, dirs, extra=(), forced=()):
+    """Replay files that could belong to this recording. `forced` ones were paired by the user."""
     from pathlib import Path
     files = [Path(p) for p in extra]
     for d in dirs:
@@ -261,12 +285,18 @@ def candidates(video_path, duration, dirs, extra=()):
     start = recording_start(video_path)
     end_guess = Path(video_path).stat().st_mtime
     out = []
+    forced = {str(Path(p)) for p in forced}
+    files += [Path(p) for p in forced]
     for f in dict.fromkeys(files):
-        if start is None and abs(f.stat().st_mtime - end_guess) > 3 * 86400:
+        if not f.exists():
+            continue
+        paired = str(f) in forced
+        if not paired and start is None and abs(f.stat().st_mtime - end_guess) > 3 * 86400:
             continue   # unknown start: only look at replays saved within a few days
         props = header(f) or {}
         epoch = float(props.get("MatchStartEpoch") or 0)
-        if start is not None and not any(start - 120 <= e <= start + duration for e in match_starts(epoch)):
+        if (not paired and start is not None
+                and not any(start - 120 <= e <= start + duration for e in match_starts(epoch))):
             continue
         out.append((f, epoch))
     return out, start
