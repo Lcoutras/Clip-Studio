@@ -59,7 +59,7 @@ MKV recordings can be analyzed and exported, but they can't be previewed in the 
 
 ## Rocket League replays (recommended)
 
-Save the replay after each match you record: on the end-of-match screen choose **Save Replay**. Rocket League puts replays in `Documents\My Games\Rocket League\TAGame\Demos`, and Clip Studio looks there automatically. You can also import `.replay` files with **Import**.
+Save the replay after each match you record: on the end-of-match screen choose **Save Replay**. Rocket League puts replays in `Documents\My Games\Rocket League\TAGame\Demos` (Steam) or `DemosEpic` (Epic Games). Clip Studio looks in both automatically, even when Documents is in OneDrive. You can also import `.replay` files with **Import**.
 
 When a recording has a matching replay, Clip Studio uses the replay's exact record of the match instead of reading the screen:
 - your goals (aerial goals marked), saves and epic saves, demos, post hits, and every assist on a teammate's goal
