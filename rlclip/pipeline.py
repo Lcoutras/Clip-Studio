@@ -15,7 +15,7 @@ DETECTION_VERSION = 6
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
-              "framing", "crop_x", "stat"]
+              "framing", "crop_x", "stat", "flag", "note"]
 
 
 HASHTAGS = {
@@ -185,7 +185,8 @@ class Project:
         is_gameplay = detect.gameplay_checker(timeline)
         warnings = self.audio_warnings(track)
         scoreboard_note = [] if is_gameplay.scoreboard_seen else [
-            "The match scoreboard wasn't visible in this recording, so voice reactions weren't used for clips."]
+            "The match scoreboard wasn't visible in this recording, so voice reactions on their own "
+            "didn't become clips (a reaction right after a play still counts)."]
         # Reactions: your mic track when voices are recorded separately, otherwise loud moments
         # in the mixed audio that aren't the goal explosion itself.
         voice = self.cfg["audio"]["voice_track"]
@@ -215,6 +216,7 @@ class Project:
         # or failed analysis leaves the previous results alone.
         for old in ("vertical", "horizontal", "raw", "work", "previews"):
             shutil.rmtree(self.out_dir / old, ignore_errors=True)
+        self._carry_flags = self.flagged()
         self.csv_path.unlink(missing_ok=True)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         with open(self.highlights_path, "w", encoding="utf-8") as f:
@@ -226,10 +228,18 @@ class Project:
         return data
 
     # ------------------------------------------------------------ step 2
+    def flagged(self):
+        """[(anchor, note)] of clips the user flagged for review."""
+        if not self.csv_path.exists():
+            return []
+        return [(float(r["anchor"]), r.get("note") or "") for r in self.read_rows() if r.get("flag")]
+
     def write_captions(self, found, recaption=False):
         if self.csv_path.exists() and not recaption:
             print(f"  using existing {self.csv_path.name} - edit it to change captions/music")
             return self.read_rows()
+        # Flags (and their notes) survive re-analysis: they move to the clip at the same moment.
+        carry = getattr(self, "_carry_flags", None) or self.flagged()
         picker = captions.CaptionPicker(self.cfg, config.resolve(self.cfg["output_dir"]) / ".captions_used.json")
         mode = render.voice_mode(self.cfg, self.info) if picker.client else None
         rows = []
@@ -253,6 +263,11 @@ class Project:
                        alt_caption=library_line if ai_line else picker.from_library(h["label"], tone))
             rows.append(row)
         picker.save_state()
+        for anchor, note in carry:
+            near = min(rows, key=lambda r: abs(float(r["anchor"]) - anchor), default=None)
+            if near is not None and abs(float(near["anchor"]) - anchor) <= 3:
+                near.update(flag="yes", note=note)
+        self._carry_flags = None
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.write_rows(rows)
         return rows

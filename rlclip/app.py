@@ -326,7 +326,8 @@ class Studio:
             scanned = saved is not None and proj.csv_path.exists()
             rows = proj.read_rows() if scanned else []
             videos.append({"name": path.name, "path": str(path), "scanned": scanned,
-                           "clips": len(rows), "kept": sum(1 for r in rows if not pipeline.is_skipped(r))})
+                           "clips": len(rows), "kept": sum(1 for r in rows if not pipeline.is_skipped(r)),
+                           "flagged": sum(1 for r in rows if r.get("flag"))})
         lib = music.MusicLibrary(self.cfg)
         infos = self.settings.get("replay_info", {})
         replays = [{"path": p, "file": Path(p).name, **infos.get(p, {})}
@@ -353,6 +354,7 @@ class Studio:
                 "music_volume": float(row.get("music_volume") or 100),
                 "framing": row.get("framing") or self.cfg["render"]["vertical_style"],
                 "crop_x": float(row.get("crop_x") or 0.5),
+                "flag": bool(row.get("flag")), "note": row.get("note") or "",
                 "rendered": self.media_url(rendered) + f"?v={int(rendered.stat().st_mtime)}"
                 if rendered.exists() else None,
             })
@@ -363,7 +365,7 @@ class Studio:
         proj = self.project(name)
         rows = proj.read_rows()
         numeric = {"start", "end", "game_volume", "music_volume", "crop_x"}
-        allowed = numeric | {"caption", "music", "skip", "tone", "framing", "category"}
+        allowed = numeric | {"caption", "music", "skip", "tone", "framing", "category", "flag", "note"}
         for row in rows:
             if int(row["clip"]) != clip:
                 continue
@@ -372,7 +374,7 @@ class Studio:
                     continue
                 if key in numeric:
                     value = f"{max(0.0, float(value)):.2f}"
-                elif key == "skip":
+                elif key in ("skip", "flag"):
                     value = "yes" if value else ""
                 row[key] = value
             if float(row["end"]) - float(row["start"]) < 1:

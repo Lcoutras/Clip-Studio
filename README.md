@@ -43,6 +43,7 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
    - **Timing:** drag the blue edges on the clip timeline, nudge with **−/+**, or set the start or end at the playhead.
    - **Caption** (🎲 gives another one), **Music**, **Game/Music volume**, and **Framing** (Full view or Zoom to fill, with a position slider).
    - **Kept / Removed** decides whether the clip gets exported.
+   - **🚩 Flag** (or press **F**) marks a clip to come back to, with an optional note. Tick **🚩 Flagged only** in the list to see just those. The recording menu shows how many are waiting ("🚩 3 to review"), and flags survive re-analysis.
 5. **Export:** **Export this clip** saves a single clip. **Export kept clips** saves all of them. **Build highlight video** joins the kept clips into one video.
 
 **Analysis speed:** the menu next to **Analyze** offers **Standard** (checks the screen every second) and **Fast** (every 2 seconds, about twice as quick; a popup shown for under 2 seconds can be missed). Either way, stretches where the screen doesn't change (menus, loading screens, pauses) are skipped automatically.
@@ -51,7 +52,7 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 
 **Updates:** when a new version is published, a green **⬆ Update to …** button appears at the top. Click it and Clip Studio downloads the update and restarts. Your clips, music, fonts and `settings.yaml` are kept. You can also check yourself from the task list (**Check for updates**).
 
-Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** remove/keep.
+Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** remove/keep, **F** flag.
 
 Exports go to `output\<recording name>\vertical\`. Highlight videos go to `output\<recording name>\`. The **Open output folder** link takes you there.
 

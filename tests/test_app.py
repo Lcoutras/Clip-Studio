@@ -102,3 +102,24 @@ def test_version_check(monkeypatch):
     assert updater.check({"update": {"repo": "me/x"}})["available"] is True
     monkeypatch.setattr(updater, "_get", lambda url, timeout: b"0.7.0\n")
     assert updater.check({"update": {"repo": "me/x"}})["available"] is False
+
+
+def test_flags_and_notes_survive_reanalysis(tmp_path):
+    from rlclip import pipeline
+    cfg = config.load()
+    cfg["output_dir"] = str(tmp_path / "out")
+    video = tmp_path / "game.mp4"
+    video.write_bytes(b"")
+    proj = pipeline.Project(video, cfg)
+    proj._info = type("Info", (), {"duration": 600})()
+    found = [{"index": 1, "label": "GOAL", "score": 7, "start": 95, "end": 103, "anchor": 100.0, "category": "Goal"},
+             {"index": 2, "label": "SAVE", "score": 5, "start": 195, "end": 203, "anchor": 200.0, "category": "Save"}]
+    rows = proj.write_captions(found, recaption=True)
+    rows[1].update(flag="yes", note="check the start")
+    proj.write_rows(rows)
+    # Re-analysis finds the save 1.5 s later and adds a new clip; the flag follows the save.
+    found[1]["anchor"] = 201.5
+    found.append({"index": 3, "label": "DEMO", "score": 5, "start": 295, "end": 303, "anchor": 300.0, "category": "Demo"})
+    rows = proj.write_captions(found, recaption=True)
+    flagged = [(r["label"], r["note"]) for r in rows if r.get("flag")]
+    assert flagged == [("SAVE", "check the start")]

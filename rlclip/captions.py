@@ -49,6 +49,7 @@ class CaptionPicker:
                 print(f"  ! AI captions unavailable ({e}); using the caption library")
 
     def save_state(self):
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.state_path, "w", encoding="utf-8") as f:
             json.dump(sorted(self.used), f, indent=1)
 

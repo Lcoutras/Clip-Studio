@@ -12,7 +12,7 @@ const COLORS = {
 const state = {
   videos: [], jobs: [], music: [], categories: [], format: "vertical",
   current: null, clips: [], source: null, sel: null, win: null, stopAt: null,
-  hidden: new Set(load("hiddenCats", [])), showRemoved: false, sort: "time", replays: [], replaySel: null,
+  hidden: new Set(load("hiddenCats", [])), showRemoved: false, flaggedOnly: false, sort: "time", replays: [], replaySel: null,
 };
 const jobStatus = new Map();
 
@@ -94,7 +94,8 @@ function renderRecordings() {
         (r.recording ? `paired with ${r.recording}` : r.date ? "needs its recording" : "reading...");
     } else {
       const v = state.videos.find(x => x.name === o.value);
-      o.textContent = `${v.name}  \u2014  ${v.scanned ? `${v.kept} kept of ${v.clips}` : "not analyzed"}`;
+      o.textContent = `${v.name}  \u2014  ${v.scanned ? `${v.kept} kept of ${v.clips}` : "not analyzed"}` +
+        (v.flagged ? `  \u00b7  \u{1F6A9} ${v.flagged} to review` : "");
     }
   }
   const any = state.videos.length + state.replays.length > 0;
@@ -260,7 +261,8 @@ async function softRefresh() {
 }
 
 function visibleClips() {
-  const list = state.clips.filter(c => !state.hidden.has(c.category) && (state.showRemoved || !c.skip));
+  const list = state.clips.filter(c => state.flaggedOnly ? c.flag
+    : !state.hidden.has(c.category) && (state.showRemoved || !c.skip));
   return state.sort === "score"
     ? list.sort((a, b) => (parseFloat(b.score) || 0) - (parseFloat(a.score) || 0))
     : list.sort((a, b) => a.anchor - b.anchor);
@@ -318,7 +320,8 @@ function renderList() {
   const list = visibleClips();
   if (!list.length) {
     const v = state.videos.find(x => x.name === state.current);
-    ul.innerHTML = `<li class="muted">${busyJob(state.current, "analyze") ? "Analyzing... clips appear here when it's done."
+    ul.innerHTML = `<li class="muted">${state.flaggedOnly ? "No flagged clips. Select a clip and press F (or the \u{1F6A9} button) to flag it."
+      : busyJob(state.current, "analyze") ? "Analyzing... clips appear here when it's done."
       : v?.scanned ? "No clips match. Turn categories back on above." : "Click Analyze to find clips."}</li>`;
   }
   for (const c of list) {
@@ -327,8 +330,16 @@ function renderList() {
     li.innerHTML = `<span class="dot"></span><span class="t"></span><span class="meta"></span><span class="why"></span>`;
     $(".dot", li).style.background = COLORS[c.category] || "var(--muted)";
     $(".t", li).textContent = c.label === "HIGHLIGHT" ? "Manual clip" : titleCase(c.label);
+    if (c.flag) {
+      const f = document.createElement("span");
+      f.className = "flagmark";
+      f.textContent = "\u{1F6A9}";
+      f.title = c.note || "Flagged for review";
+      $(".t", li).appendChild(f);
+    }
     $(".meta", li).textContent = `${fmtTime(c.anchor)} · ${(c.end - c.start).toFixed(0)}s`;
-    $(".why", li).textContent = (c.rendered ? "✓ exported · " : "") + (c.reason || "");
+    $(".why", li).textContent = (c.flag && c.note ? `\u{1F6A9} ${c.note} \u00b7 ` : "") +
+      (c.rendered ? "\u2713 exported \u00b7 " : "") + (c.reason || "");
     li.onclick = () => selectClip(c.clip);
     ul.appendChild(li);
   }
@@ -375,6 +386,11 @@ function renderEditor() {
   const keep = $("#ed-keep");
   keep.textContent = c.skip ? "Removed — click to keep" : "Kept — click to remove";
   keep.className = "keep " + (c.skip ? "removed" : "kept");
+  const flag = $("#ed-flag");
+  flag.classList.toggle("on", c.flag);
+  flag.textContent = c.flag ? "\u{1F6A9} Flagged" : "\u{1F6A9} Flag";
+  $("#ed-note").hidden = !c.flag;
+  if (document.activeElement !== $("#ed-note")) $("#ed-note").value = c.note || "";
   $("#ed-start").textContent = fmtRel(c.start - c.anchor);
   $("#ed-end").textContent = fmtRel(c.end - c.anchor);
   $("#ed-length").textContent = `${(c.end - c.start).toFixed(1)} seconds (${fmtTime(c.start)} – ${fmtTime(c.end)})`;
@@ -478,7 +494,7 @@ function renderTimeline() {
 
 function renderOverview() {
   const box = $("#overview");
-  $$(".o-mark", box).forEach(m => m.remove());
+  $$(".o-mark, .o-flag", box).forEach(m => m.remove());
   const dur = player.duration;
   if (!dur) return;
   for (const c of state.clips) {
@@ -489,8 +505,16 @@ function renderOverview() {
     m.style.width = `${((c.end - c.start) / dur) * 100}%`;
     m.style.background = COLORS[c.category];
     m.title = `${c.label} at ${fmtTime(c.anchor)}`;
+    if (c.flag) m.title += ` \u2014 flagged${c.note ? ": " + c.note : ""}`;
     m.onclick = ev => { ev.stopPropagation(); selectClip(c.clip); };
     box.appendChild(m);
+    if (c.flag) {
+      const f = document.createElement("div");
+      f.className = "o-flag";
+      f.style.left = `${((c.start + c.end) / 2 / dur) * 100}%`;
+      f.textContent = "\u{1F6A9}";
+      box.appendChild(f);
+    }
   }
 }
 
@@ -711,6 +735,23 @@ $("#speed").value = load("speed", "standard");
 $("#speed").onchange = ev => store("speed", ev.target.value);
 $("#sort").onchange = ev => { state.sort = ev.target.value; renderList(); };
 $("#show-removed").onchange = ev => { state.showRemoved = ev.target.checked; renderAll(); };
+$("#flagged-only").onchange = ev => {
+  state.flaggedOnly = ev.target.checked;
+  renderAll();
+  const first = visibleClips()[0];
+  if (first && !visibleClips().some(c => c.clip === state.sel)) selectClip(first.clip);
+};
+function toggleFlag() {
+  const c = selClip();
+  if (!c) return;
+  save({ flag: !c.flag });
+  renderList();
+  renderEditor();
+  renderOverview();
+  if (c.flag) $("#ed-note").focus();
+}
+$("#ed-flag").onclick = toggleFlag;
+$("#ed-note").oninput = ev => { save({ note: ev.target.value }); renderList(); };
 
 $("#prev").onclick = () => step(-1);
 $("#next").onclick = () => step(1);
@@ -792,6 +833,7 @@ document.addEventListener("keydown", ev => {
   else if (k === "i") setTrim("start", player.currentTime);
   else if (k === "o") setTrim("end", player.currentTime);
   else if (k === "delete" || k === "backspace") $("#ed-keep").click();
+  else if (k === "f") toggleFlag();
 });
 
 refreshState();

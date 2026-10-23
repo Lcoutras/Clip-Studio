@@ -52,6 +52,7 @@
         <option value="score">Best first</option>
       </select>
       <label class="check"><input type="checkbox" id="show-removed"> Show removed</label>
+      <label class="check" title="Only clips you flagged for review"><input type="checkbox" id="flagged-only"> &#128681; Flagged only</label>
     </div>
     <ul id="cliplist" class="cliplist"></ul>
     <div class="list-actions">
@@ -101,7 +102,11 @@
       <select id="ed-category"></select>
     </div>
     <p class="reason" id="ed-reason"></p>
-    <button id="ed-keep" class="keep"></button>
+    <div class="keep-row">
+      <button id="ed-keep" class="keep"></button>
+      <button id="ed-flag" class="flag" title="Flag this clip to review later (F)">&#128681; Flag</button>
+    </div>
+    <textarea id="ed-note" class="note" rows="2" placeholder="Why did you flag it? (optional)" hidden></textarea>
 
     <h3>Timing</h3>
     <div class="trim-grid">
