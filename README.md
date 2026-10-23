@@ -37,14 +37,23 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 2. **Analyze:** Clip Studio reads the game's popups, listens for goal explosions, and picks up reactions on your mic track. A reaction right after a play stays in that clip, and replays don't become separate clips.
 3. **Review:** the recording menu at the top starts on **All recordings**, so clips from every recording show up in one list as each one finishes analyzing (a ⏳ row at the top shows what's still running). Each clip says which recording it's from, and clicking it loads that recording in the player. Pick a single recording in the menu to see only its clips. Suggested clips are labeled **Goal, Aerial, Save, Demo, Assist, Funny Moment, Fail?** with the reason each was picked.
    - Click a category chip to hide or show that type.
-   - **Fail?** clips (someone else scored) start out removed. Tick **Show removed** to see them.
+   - **Fail?** clips (someone else scored) start out hidden. Tick **Show rejected** to see them.
    - Missed something? Scrub the **Whole recording** bar and click **+ Add moment here**.
 4. **Edit** (right panel):
    - **Timing:** drag the blue edges on the clip timeline, nudge with **−/+**, or set the start or end at the playhead.
    - **Caption** (🎲 gives another one), **Music**, **Game/Music volume**, and **Framing** (Full view or Zoom to fill, with a position slider).
-   - **Kept / Removed** decides whether the clip gets exported.
+   - **Kept / Rejected** decides whether the clip gets exported. When you reject a clip, pick why: **Not gameplay**, **Not my play**, **Nothing happened**, **Bad timing**, **Duplicate** or **Other**. See *Clip Studio learns from you* below.
    - **🚩 Flag** (or press **F**) marks a clip to come back to, with an optional note. Tick **🚩 Flagged only** in the list to see just those. The recording menu shows how many are waiting ("🚩 3 to review"), and flags survive re-analysis.
 5. **Export:** **Export this clip** saves a single clip. **Export kept clips** saves all of them. **Build highlight video** joins the kept clips into one video. In **All recordings** it uses kept clips from every recording, in recording order.
+
+**Clip Studio learns from you.** Your rejections, their reasons, and the clips you export are remembered on your PC (`output\feedback.json`, kept through updates) and change the next analysis:
+- A kind of clip you keep rejecting (for example voice reactions on their own, or other players' goals) is ranked lower once you've rejected it 3 times and more often than you kept it.
+- A clip rejected as **Not gameplay** teaches it what that screen (a menu, a lobby, a loading screen) looks like, and moments that look the same are skipped.
+- If you keep trimming one type of clip the same way, say 2 seconds more lead-in on goals, that becomes the default for that type (after 3 exported clips).
+- **Bad timing** and **Duplicate** don't count against that kind of clip.
+- Rejected clips stay rejected when a recording is analyzed again.
+
+**What Clip Studio learned** (under the clip list) shows the current rules and has **Forget everything**. **Save feedback report** writes `output\feedback_report.txt`. Share it with Claude to improve the built-in defaults for future versions.
 
 **Analysis speed:** the menu next to **Analyze** offers **Standard** (checks the screen every second) and **Fast** (every 2 seconds, about twice as quick; a popup shown for under 2 seconds can be missed). Either way, stretches where the screen doesn't change (menus, loading screens, pauses) are skipped automatically.
 
@@ -52,7 +61,7 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 
 **Updates:** when a new version is published, a green **⬆ Update to …** button appears at the top. Click it and Clip Studio downloads the update and restarts. Your clips, music, fonts and `settings.yaml` are kept. You can also check yourself from the task list (**Check for updates**).
 
-Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** remove/keep, **F** flag.
+Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** reject/keep, **F** flag.
 
 Exports go to `output\<recording name>\vertical\`. Highlight videos go to `output\<recording name>\`, or `output\highlights\` when built from All recordings. The **Open output folder** link takes you there.
 

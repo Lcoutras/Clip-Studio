@@ -3,6 +3,7 @@
 from dataclasses import asdict, dataclass, field
 
 from .detect import Event
+from .feedback import signal_of
 
 CATEGORIES = ["Goal", "Aerial", "Save", "Demo", "Assist", "Funny Moment", "Fail?", "Manual"]
 
@@ -39,6 +40,7 @@ class Highlight:
     category: str = "Goal"
     reason: str = ""
     stat: str = ""
+    signal: str = ""     # what made it a clip, for learning from your feedback
     events: list = field(default_factory=list)
 
     def to_dict(self):
@@ -86,12 +88,20 @@ def _reason(group, reactions_db, mixed_audio=False):
     return text[0].upper() + text[1:]
 
 
-def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio=False, is_gameplay=None):
+def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio=False, is_gameplay=None,
+          learned=None, veto=None, report=None):
     """reactions: [(time, jump_db)] from the mic track (or the mixed audio if mixed_audio).
 
     is_gameplay(t): whether a match is being played at t. Reactions and other players' goals
     outside gameplay (menus, lobby, loading screens) are ignored: shouting in the menu isn't a clip.
+    learned: what your rejections and exports taught (see feedback.Feedback.learned).
+    veto(highlight): True to skip a clip that would be picked (it looks like a screen you rejected).
+    report: a dict that gets {"lowered": {signal: clips}, "vetoed": n} for the notes.
     """
+    learned = learned or {}
+    report = report if report is not None else {}
+    report.setdefault("lowered", {})
+    report.setdefault("vetoed", 0)
     is_gameplay = is_gameplay or (lambda t: True)
     reactions = list(reactions or [])
     ocr_events = [e for e in ocr_events if e.label != "FAIL?" or is_gameplay(e.time)]
@@ -141,6 +151,12 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
         if best.source == "reaction":
             reacts.append((best.time, float(best.detail.split("dB")[0].lstrip("+"))))
         score = best.weight + 0.3 * sum(others.values()) + (1.0 if reacts and best.source != "reaction" else 0)
+        signal = signal_of(group)
+        penalty = learned.get("penalty", {}).get(signal, 0)
+        if penalty:
+            score -= penalty
+            report["lowered"][signal] = report["lowered"].get(signal, 0) + 1
+        category = category_of(best.label)
         # Only the moments that matter set the window; a stray blip shouldn't add lead-in.
         span = [e for e in group if e.weight >= best.weight * 0.5]
         start = min(e.time for e in span) - det["pre_seconds"]
@@ -148,14 +164,18 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
         if reacts:
             # Keep the reaction: end a moment after the last one.
             end = max(end, max(t for t, _ in reacts) + det["reaction_tail"])
+        # Time it the way you trim this kind of clip, but never cut off the play itself.
+        shift_start, shift_end = learned.get("timing", {}).get(category, (0, 0))
+        start = min(start + shift_start, best.time - 1)
+        end = max(end + shift_end, best.time + 1)
         if end - start > det["max_clip_seconds"]:
             start = max(start, best.time - det["max_clip_seconds"] * 0.6)
             end = start + det["max_clip_seconds"]
         start, end = max(0.0, start), min(duration, end)
         highlights.append(Highlight(
             0, round(start, 2), round(end, 2), round(best.time, 2), best.label, round(score, 2),
-            best.mood, category_of(best.label), _reason(group, [db for _, db in reacts], mixed_audio),
-            getattr(best, "stat", ""), group))
+            best.mood, category, _reason(group, [db for _, db in reacts], mixed_audio),
+            getattr(best, "stat", ""), signal, group))
 
     picked = []
     for h in sorted(highlights, key=lambda h: h.score, reverse=True):
@@ -163,6 +183,9 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
             continue
         if any(h.start < p.end and p.start < h.end for p in picked):
             continue  # overlaps a better clip
+        if veto and h.signal and not h.signal.startswith("replay:") and veto(h):
+            report["vetoed"] += 1
+            continue
         picked.append(h)
     picked.sort(key=lambda h: h.start)
     for i, h in enumerate(picked, 1):

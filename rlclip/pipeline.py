@@ -8,14 +8,14 @@ import re
 import shutil
 from pathlib import Path
 
-from . import captions, config, detect, ffmpeg, highlights, music, render, replay
+from . import captions, config, detect, feedback, ffmpeg, highlights, music, render, replay
 
 # Bump when detection changes enough that old results should be thrown away.
 DETECTION_VERSION = 6
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
-              "framing", "crop_x", "stat", "flag", "note"]
+              "framing", "crop_x", "stat", "flag", "note", "reject_reason"]
 
 
 HASHTAGS = {
@@ -55,6 +55,10 @@ def join_clips(parts, out, fps):
              "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]
     ffmpeg.run(args)
     return Path(out)
+
+
+def feedback_path(cfg):
+    return config.resolve(cfg["output_dir"]) / "feedback.json"
 
 
 def is_skipped(row):
@@ -229,7 +233,30 @@ class Project:
         notes = scoreboard_note + notes
         for n in notes:
             print(f"  {n}")
-        found = highlights.build(ocr, peaks, markers, det, info.duration, reactions, mixed, is_gameplay)
+        learned_notes = []
+        fb = feedback.Feedback(feedback_path(self.cfg))
+        learned = fb.learned()
+        veto = None
+        if learned["screens"]:
+            def veto(h):
+                frames = feedback.clip_thumbnails(self.video, h.start, h.anchor, h.end)
+                return feedback.looks_rejected(frames, learned["screens"])
+        report = {}
+        found = highlights.build(ocr, peaks, markers, det, info.duration, reactions, mixed, is_gameplay,
+                                 learned=learned, veto=veto, report=report)
+        if report.get("vetoed"):
+            n = report["vetoed"]
+            learned_notes.append(f"Learned from your feedback: skipped {n} moment{'s' if n != 1 else ''} that "
+                                 "looked like screens you rejected as not gameplay.")
+        for signal, n in report.get("lowered", {}).items():
+            learned_notes.append(f"Learned from your feedback: ranked {feedback.describe(signal)} lower "
+                                 f"({n} moment{'s' if n != 1 else ''}).")
+        if learned["timing"]:
+            learned_notes.append("Learned from your feedback: clips are timed the way you trim them ("
+                                 + ", ".join(sorted(learned["timing"])) + ").")
+        for n in learned_notes:
+            print(f"  {n}")
+        notes = notes + learned_notes
         data = [h.to_dict() for h in found]
         # Old clips and captions belong to the old detection; clear them only now, so a cancelled
         # or failed analysis leaves the previous results alone.
@@ -247,6 +274,12 @@ class Project:
         return data
 
     # ------------------------------------------------------------ step 2
+    def highlight_for(self, row):
+        """The detector's original suggestion behind a clip (None for clips you added)."""
+        if row.get("source") != "auto":
+            return None
+        return next((h for h in self.load_highlights() or [] if h["index"] == int(row["clip"])), None)
+
     def flagged(self):
         """[(anchor, note)] of clips the user flagged for review."""
         if not self.csv_path.exists():
@@ -287,6 +320,14 @@ class Project:
             if near is not None and abs(float(near["anchor"]) - anchor) <= 3:
                 near.update(flag="yes", note=note)
         self._carry_flags = None
+        # Clips you rejected stay rejected when the recording is analyzed again.
+        for key, rec in feedback.Feedback(feedback_path(self.cfg)).data["clips"].items():
+            video, anchor = key.rsplit("|", 1)
+            if rec["verdict"] != "reject" or video != self.video.name:
+                continue
+            near = min(rows, key=lambda r: abs(float(r["anchor"]) - float(anchor)), default=None)
+            if near is not None and abs(float(near["anchor"]) - float(anchor)) <= 3:
+                near.update(skip="yes", reject_reason=rec.get("reason", ""))
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.write_rows(rows)
         return rows

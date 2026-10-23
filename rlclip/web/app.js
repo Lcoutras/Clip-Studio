@@ -53,7 +53,8 @@ async function refreshState() {
   let data;
   try { data = await api("/api/state"); } catch { return; }
   Object.assign(state, { videos: data.videos, replays: data.replays || [], jobs: data.jobs, music: data.music,
-                         categories: data.categories, format: data.format, version: data.version });
+                         categories: data.categories, format: data.format, version: data.version,
+                         rejectReasons: data.reject_reasons || {} });
   renderRecordings();
   renderStatus();
   renderUpdate(data.update);
@@ -377,7 +378,8 @@ function renderList() {
     li.textContent = state.flaggedOnly ? "No flagged clips. Select a clip and press F (or the \u{1F6A9} button) to flag it."
       : busy.length ? "Clips appear here as each recording finishes."
       : all ? (state.videos.some(x => x.scanned) ? "No clips match. Turn categories back on above." : "Click Analyze all to find clips.")
-      : v?.scanned ? "No clips match. Turn categories back on above." : "Click Analyze to find clips.";
+      : v?.scanned ? (v.clips ? "No clips match. Turn categories back on above." : "No clips found in this recording.")
+      : "Click Analyze to find clips.";
     ul.appendChild(li);
   }
   for (const c of list) {
@@ -395,6 +397,7 @@ function renderList() {
     }
     $(".meta", li).textContent = `${fmtTime(c.anchor)} · ${(c.end - c.start).toFixed(0)}s`;
     $(".why", li).textContent = (all ? `${c.rec_label} \u00b7 ` : "") +
+      (c.skip && c.reject_reason ? `Rejected: ${(state.rejectReasons[c.reject_reason] || "").toLowerCase()} \u00b7 ` : "") +
       (c.flag && c.note ? `\u{1F6A9} ${c.note} \u00b7 ` : "") +
       (c.rendered ? "\u2713 exported \u00b7 " : "") + (c.reason || "");
     li.onclick = () => selectClip(c.key);
@@ -442,8 +445,18 @@ function renderEditor() {
   cat.value = c.category;
   $("#ed-reason").textContent = c.reason ? `Why: ${c.reason}` : "";
   const keep = $("#ed-keep");
-  keep.textContent = c.skip ? "Removed — click to keep" : "Kept — click to remove";
+  keep.textContent = c.skip ? "Rejected — click to keep" : "Kept — click to reject";
   keep.className = "keep " + (c.skip ? "removed" : "kept");
+  $("#ed-reject").hidden = !c.skip;
+  const chips = $("#reject-chips");
+  chips.innerHTML = "";
+  for (const [code, text] of Object.entries(state.rejectReasons || {})) {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.className = "reject-chip" + (c.reject_reason === code ? " on" : "");
+    b.onclick = () => { save({ reject_reason: c.reject_reason === code ? "" : code }); renderEditor(); renderList(); };
+    chips.appendChild(b);
+  }
   const flag = $("#ed-flag");
   flag.classList.toggle("on", c.flag);
   flag.textContent = c.flag ? "\u{1F6A9} Flagged" : "\u{1F6A9} Flag";
@@ -834,7 +847,7 @@ $("#add-here").onclick = async () => {
 
 $("#ed-keep").onclick = () => {
   const c = selClip();
-  save({ skip: !c.skip });
+  save(c.skip ? { skip: false, reject_reason: "" } : { skip: true });
   renderAll();
 };
 $("#ed-category").onchange = ev => { save({ category: ev.target.value }); renderAll(); };
@@ -899,7 +912,7 @@ $("#modal-close").onclick = closeModal;
 $("#modal").addEventListener("click", ev => { if (ev.target.id === "modal") closeModal(); });
 
 document.addEventListener("keydown", ev => {
-  if (ev.key === "Escape") return closeModal();
+  if (ev.key === "Escape") { $("#learn").hidden = true; return closeModal(); }
   if (typing() || !selClip()) return;
   const k = ev.key.toLowerCase();
   if (k === " ") { ev.preventDefault(); player.paused ? player.play() : player.pause(); }
@@ -914,3 +927,35 @@ document.addEventListener("keydown", ev => {
 
 refreshState();
 setInterval(refreshState, 1500);
+
+// ------------------------------------------------------------------ what the app learned
+
+async function showLearned() {
+  let data;
+  try { data = await api("/api/learning"); } catch (e) { return report(e); }
+  const reasons = Object.entries(data.reasons).map(([k, v]) => `${k}: ${v}`).join(" \u00b7 ");
+  $("#learn-counts").textContent = `${data.rejected} rejected` + (reasons ? ` (${reasons})` : "") +
+    ` \u00b7 ${data.kept} exported`;
+  const ul = $("#learn-rules");
+  ul.innerHTML = "";
+  for (const r of data.rules.length ? data.rules
+    : ["Nothing yet. Reject clips with a reason, and export the ones you like: after a few of the same kind, the next analysis changes."]) {
+    const li = document.createElement("li");
+    li.textContent = r;
+    ul.appendChild(li);
+  }
+  $("#learn").hidden = false;
+}
+$("#learned").onclick = showLearned;
+$("#learn-close").onclick = () => { $("#learn").hidden = true; };
+$("#learn").onclick = ev => { if (ev.target.id === "learn") $("#learn").hidden = true; };
+$("#learn-report").onclick = async () => {
+  try {
+    const r = await api("/api/learning/report", {});
+    alert(`Saved ${r.path}\n\nShare this file (e.g. with Claude) to improve the built-in defaults.`);
+  } catch (e) { report(e); }
+};
+$("#learn-reset").onclick = async () => {
+  if (!confirm("Forget all your rejections and exports? Clip Studio goes back to its built-in defaults.")) return;
+  try { await api("/api/learning/reset", {}); showLearned(); } catch (e) { report(e); }
+};

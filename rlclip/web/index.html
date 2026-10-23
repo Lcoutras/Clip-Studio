@@ -51,7 +51,7 @@
         <option value="time">In order</option>
         <option value="score">Best first</option>
       </select>
-      <label class="check"><input type="checkbox" id="show-removed"> Show removed</label>
+      <label class="check"><input type="checkbox" id="show-removed"> Show rejected</label>
       <label class="check" title="Only clips you flagged for review"><input type="checkbox" id="flagged-only"> &#128681; Flagged only</label>
     </div>
     <ul id="cliplist" class="cliplist"></ul>
@@ -59,6 +59,7 @@
       <button id="export-kept" class="primary">Export kept clips</button>
       <button id="compile">Build highlight video</button>
       <button id="open-folder" class="link">Open output folder</button>
+      <button id="learned" class="link">What Clip Studio learned</button>
     </div>
   </aside>
 
@@ -105,6 +106,10 @@
     <div class="keep-row">
       <button id="ed-keep" class="keep"></button>
       <button id="ed-flag" class="flag" title="Flag this clip to review later (F)">&#128681; Flag</button>
+    </div>
+    <div id="ed-reject" class="reject-why" hidden>
+      <div class="muted small">Why reject it? Clip Studio learns from this and suggests better clips next time.</div>
+      <div id="reject-chips" class="reject-chips"></div>
     </div>
     <textarea id="ed-note" class="note" rows="2" placeholder="Why did you flag it? (optional)" hidden></textarea>
 
@@ -165,6 +170,21 @@
     <ul id="rv-timeline" class="rv-timeline"></ul>
   </div>
 </section>
+
+<div id="learn" class="modal" hidden>
+  <div class="modal-box learn-box">
+    <button class="modal-close" id="learn-close" aria-label="Close">&times;</button>
+    <h2>What Clip Studio learned</h2>
+    <p class="muted small">From the clips you reject (with a reason) and the clips you export. It all stays on
+      your PC and applies the next time a recording is analyzed. Click <b>Analyze</b> again to re-check one.</p>
+    <div id="learn-counts" class="learn-counts"></div>
+    <ul id="learn-rules" class="learn-rules"></ul>
+    <div class="learn-actions">
+      <button id="learn-report" title="Save a text report you can share, so the built-in defaults can improve for everyone">Save feedback report</button>
+      <button id="learn-reset">Forget everything</button>
+    </div>
+  </div>
+</div>
 
 <div id="dropzone" class="dropzone" hidden><div>Drop to import</div></div>
 

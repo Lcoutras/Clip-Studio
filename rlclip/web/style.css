@@ -191,3 +191,12 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: v
   border-bottom: 1px solid var(--line); font-size: 13px; font-variant-numeric: tabular-nums; }
 .rv-timeline li.mine { color: var(--text); font-weight: 600; }
 .rv-timeline li:not(.mine) { color: var(--muted); }
+.reject-why { margin-top: 8px; }
+.reject-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.reject-chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+.reject-chip.on { border-color: var(--remove); color: var(--remove); background: var(--panel-2); }
+.learn-box { width: min(560px, calc(100vw - 32px)); padding: 20px; }
+.learn-box h2 { margin: 0 0 6px; font-size: 18px; }
+.learn-counts { font-size: 13px; margin: 10px 0; }
+.learn-rules { margin: 0 0 14px; padding-left: 18px; line-height: 1.5; }
+.learn-actions { display: flex; gap: 8px; flex-wrap: wrap; }

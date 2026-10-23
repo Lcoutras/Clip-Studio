@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, captions, config, ffmpeg, highlights, music, pipeline, replay, updater
+from . import __version__, captions, config, feedback, ffmpeg, highlights, music, pipeline, replay, updater
 
 WEB = Path(__file__).resolve().parent / "web"
 
@@ -48,6 +48,7 @@ class Studio:
         self.settings.setdefault("library", [])
         self.jobs = []
         self.lock = threading.Lock()
+        self.feedback_lock = threading.Lock()
         self.queue = queue.Queue()
         threading.Thread(target=self._worker, daemon=True).start()
         threading.Thread(target=self._update_checker, daemon=True).start()
@@ -289,6 +290,7 @@ class Studio:
                            message=f"Exporting clip {row['clip']} ({len(done)} of {len(rows)})...")
 
             proj.render_all(rows, self.formats(), on_clip=on_clip)
+            self.learn_kept(proj, rows)
             job["message"] = f"Exported {len(rows)} clip{'s' if len(rows) != 1 else ''}"
         return self.submit("export", name, run)
 
@@ -310,8 +312,50 @@ class Studio:
             job.update(progress=80)
             out = proj.compile([int(r["clip"]) for r in rows], layout,
                                on_progress=lambda m: job.update(message=m))
+            self.learn_kept(proj, rows)
             job.update(message=f"Highlight video saved: {out.name}", result=self.media_url(out))
         return self.submit("compile", name, run)
+
+    # ------------------------------------------------------------ learning from feedback
+    def learn_kept(self, proj, rows):
+        """Exported clips were good suggestions; remember them (and how they were trimmed)."""
+        with self.feedback_lock:
+            fb = feedback.Feedback(pipeline.feedback_path(self.cfg))
+            for row in rows:
+                fb.keep(proj.video, row, proj.highlight_for(row))
+            fb.save()
+
+    def learn_rejected(self, proj, row, rejected):
+        with self.feedback_lock:
+            fb = feedback.Feedback(pipeline.feedback_path(self.cfg))
+            if not rejected:
+                fb.unreject(proj.video, row)
+                return
+            reason = row.get("reject_reason") or ""
+            screens = None
+            if reason == "not_gameplay":
+                screens = feedback.clip_thumbnails(proj.video, float(row["start"]), float(row["anchor"]),
+                                                   float(row["end"]))
+            fb.reject(proj.video, row, proj.highlight_for(row), reason, screens)
+
+    def learning(self):
+        with self.feedback_lock:
+            return feedback.Feedback(pipeline.feedback_path(self.cfg)).summary()
+
+    def reset_learning(self):
+        with self.feedback_lock:
+            feedback.Feedback(pipeline.feedback_path(self.cfg)).reset()
+        return self.learning()
+
+    def learning_report(self):
+        """Write the feedback report next to the clips and show it in Explorer."""
+        with self.feedback_lock:
+            text = feedback.Feedback(pipeline.feedback_path(self.cfg)).report()
+        out = self.out_root / "feedback_report.txt"
+        out.write_text(text, encoding="utf-8")
+        if os.name == "nt":
+            subprocess.Popen(["explorer", "/select,", str(out)])  # noqa: S603,S607 - the user's own file
+        return {"path": str(out), "text": text}
 
     def formats(self):
         fmt = self.cfg["render"]["format"]
@@ -337,7 +381,8 @@ class Studio:
                 "music": [p.relative_to(lib.root).as_posix() for p in lib.tracks()],
                 "categories": highlights.CATEGORIES,
                 "hidden_categories": self.cfg["detection"].get("hidden_categories", []),
-                "format": self.formats()[0], "version": __version__, "update": self.update}
+                "format": self.formats()[0], "version": __version__, "update": self.update,
+                "reject_reasons": feedback.REASONS}
 
     def recording_label(self, path):
         """'Oct 23, 12:41 AM' from the recording's start time, or its file name."""
@@ -372,6 +417,7 @@ class Studio:
                     "framing": row.get("framing") or self.cfg["render"]["vertical_style"],
                     "crop_x": float(row.get("crop_x") or 0.5),
                     "flag": bool(row.get("flag")), "note": row.get("note") or "",
+                    "reject_reason": row.get("reject_reason") or "",
                     "rendered": self.media_url(rendered) + f"?v={int(rendered.stat().st_mtime)}"
                     if rendered.exists() else None,
                 })
@@ -404,6 +450,7 @@ class Studio:
                     job.update(progress=round(80 * i / max(1, len(items))),
                                message=f"Exporting clip {i + 1} of {len(items)} first...")
                     proj.render_all([row], self.formats())
+                self.learn_kept(proj, [row])
                 parts.append(out)
             _check(job)
             if not parts:
@@ -419,7 +466,8 @@ class Studio:
         proj = self.project(name)
         rows = proj.read_rows()
         numeric = {"start", "end", "game_volume", "music_volume", "crop_x"}
-        allowed = numeric | {"caption", "music", "skip", "tone", "framing", "category", "flag", "note"}
+        allowed = numeric | {"caption", "music", "skip", "tone", "framing", "category", "flag", "note",
+                             "reject_reason"}
         for row in rows:
             if int(row["clip"]) != clip:
                 continue
@@ -433,6 +481,12 @@ class Studio:
                 row[key] = value
             if float(row["end"]) - float(row["start"]) < 1:
                 raise ValueError("A clip must be at least 1 second long")
+            if "skip" in fields and not fields["skip"]:
+                row["reject_reason"] = ""
+            if "skip" in fields or "reject_reason" in fields:
+                proj.write_rows(rows)
+                self.learn_rejected(proj, row, pipeline.is_skipped(row))
+                return
         proj.write_rows(rows)
 
     def add_manual(self, name, at):
@@ -536,6 +590,8 @@ def make_handler(studio):
                     return self._file(studio.video(unquote(url.path[len("/source/"):])))
                 if url.path == "/api/state":
                     return self._json(studio.state())
+                if url.path == "/api/learning":
+                    return self._json(studio.learning())
                 if url.path == "/api/clips":
                     return self._json(studio.clips(query["video"][0]))
                 self.send_error(404)
@@ -587,6 +643,10 @@ def make_handler(studio):
                     return self._json(studio.add_manual(data["video"], float(data["at"])))
                 if path == "/api/caption":
                     return self._json(studio.suggest_caption(data.get("label", ""), data.get("tone")))
+                if path == "/api/learning/reset":
+                    return self._json(studio.reset_learning())
+                if path == "/api/learning/report":
+                    return self._json(studio.learning_report())
                 if path == "/api/open":
                     return self._json({"folder": studio.open_folder(data["video"])})
                 self.send_error(404)
