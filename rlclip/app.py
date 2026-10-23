@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, captions, config, highlights, music, pipeline, updater
+from . import __version__, captions, config, ffmpeg, highlights, music, pipeline, replay, updater
 
 WEB = Path(__file__).resolve().parent / "web"
 
@@ -97,8 +97,10 @@ class Studio:
                     if str(f) not in self.settings.setdefault("replays", []):
                         self.settings["replays"].append(str(f))
                     replays.append(f.name)
-        if replays and not any(Path(str(r or "").strip().strip('"')).suffix.lower() != ".replay" for r in paths):
+        if replays:
             self.save_settings()
+            self.match_replays([p for p in self.settings["replays"] if Path(p).name in replays])
+        if replays and not any(Path(str(r or "").strip().strip('"')).suffix.lower() != ".replay" for r in paths):
             return replays
         for raw in paths:
             if not raw:
@@ -115,6 +117,37 @@ class Studio:
         if not added and not replays:
             raise ValueError("No video or replay files found there (mp4, mkv, mov, replay...)")
         return added
+
+    def match_replays(self, replay_paths):
+        """Background task: find which recording each new replay belongs to and analyze it."""
+        def run(job):
+            matched, unmatched = set(), []
+            for i, rp in enumerate(replay_paths):
+                job.update(progress=round(100 * i / max(1, len(replay_paths))),
+                           message=f"Reading replay {Path(rp).name}...")
+                props = replay.header(rp) or {}
+                epoch = float(props.get("MatchStartEpoch") or 0)
+                hits = []
+                for video in self.library():
+                    try:
+                        if replay.covers(video, ffmpeg.probe(video).duration, epoch):
+                            hits.append(video.name)
+                    except Exception:
+                        continue
+                if hits:
+                    matched.update(hits)
+                else:
+                    unmatched.append(replay.describe_time(epoch) if epoch else Path(rp).name)
+            for name in sorted(matched):
+                self.analyze(name, rescan=True)
+            parts = []
+            if matched:
+                parts.append(f"Replay matched {', '.join(sorted(matched))}, re-analyzing")
+            if unmatched:
+                parts.append("No imported recording covers the match from " + ", ".join(unmatched)
+                             + ". Import the recording of that match")
+            job["message"] = ". ".join(parts) or "Done"
+        return self.submit("replay", "replays", run)
 
     def remove(self, name):
         """Take a recording off the list (the video file itself is left alone)."""

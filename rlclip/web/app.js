@@ -519,7 +519,9 @@ async function importPaths(paths) {
   try {
     const res = await api("/api/import", { paths });
     if (paths.every(p => p.toLowerCase().endsWith(".replay"))) {
-      alert(`Added ${res.added.length} replay${res.added.length === 1 ? "" : "s"}. Click Analyze (or Re-analyze) on the matching recording to use them.`);
+      refreshState();
+      $("#tasks").hidden = false;   // show the progress: it finds the recording and re-analyzes it
+      renderTasks();
       return;
     }
     await window.onImported(res.added);
@@ -528,7 +530,9 @@ async function importPaths(paths) {
 
 window.onImported = async names => {
   await refreshState();
-  if (!names || !names.length) return;
+  // Replays aren't recordings: they're matched in the background (see the task list).
+  names = (names || []).filter(n => state.videos.some(v => v.name === n));
+  if (!names.length) { $("#tasks").hidden = false; renderTasks(); return; }
   await selectRecording(names[0]);
   for (const name of names) {
     const v = state.videos.find(x => x.name === name);

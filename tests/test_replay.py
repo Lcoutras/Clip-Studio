@@ -82,3 +82,19 @@ def test_recording_start_from_obs_and_nvidia_names(tmp_path):
         f = tmp_path / name
         f.write_bytes(b"")
         assert replay.recording_start(f) == datetime.datetime(2026, 10, 22, 23, 44, 9).timestamp()
+
+
+def test_match_start_tries_utc_and_local_wall_clock(monkeypatch):
+    import os
+    import time
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    try:
+        epoch = 1792712667   # from a real replay: as UTC it reads 23:44:27, its local Date said 23:52:32
+        starts = replay.match_starts(epoch)
+        assert epoch in starts and len(starts) == 2
+        local = min(starts, key=lambda e: abs(e - epoch) if e != epoch else 1e9)
+        assert local - epoch == 4 * 3600   # New York in October is UTC-4
+    finally:
+        monkeypatch.delenv("TZ")
+        time.tzset()

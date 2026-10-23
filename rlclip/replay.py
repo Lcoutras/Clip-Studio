@@ -223,6 +223,33 @@ def header(path):
     return json.loads(out.stdout).get("properties", {})
 
 
+def match_starts(epoch):
+    """Possible match start times for a replay's MatchStartEpoch.
+
+    In a real replay, MatchStartEpoch read as UTC equals the replay's local "Date" stamp, so
+    Rocket League appears to store local wall-clock time in it. Rather than rely on that, try both
+    readings (true UTC and local wall clock); lining up with the recording picks the right one.
+    """
+    import datetime
+    if not epoch:
+        return []
+    wall = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).replace(tzinfo=None)
+    local = wall.timestamp()     # that wall-clock time on this PC
+    return [epoch] if abs(local - epoch) < 1 else [local, epoch]
+
+
+def covers(video_path, duration, epoch):
+    """True if a recording (by its start time) spans a match that started at `epoch`."""
+    start = recording_start(video_path)
+    return start is not None and any(start - 120 <= e <= start + duration for e in match_starts(epoch))
+
+
+def describe_time(epoch):
+    import datetime
+    when = datetime.datetime.fromtimestamp(match_starts(epoch)[0])
+    return when.strftime("%b %d at %I:%M %p").replace(" 0", " ")
+
+
 def candidates(video_path, duration, dirs, extra=()):
     """Replay files that could belong to this recording."""
     from pathlib import Path
@@ -239,7 +266,7 @@ def candidates(video_path, duration, dirs, extra=()):
             continue   # unknown start: only look at replays saved within a few days
         props = header(f) or {}
         epoch = float(props.get("MatchStartEpoch") or 0)
-        if start is not None and not (start - 120 <= epoch <= start + duration):
+        if start is not None and not any(start - 120 <= e <= start + duration for e in match_starts(epoch)):
             continue
         out.append((f, epoch))
     return out, start

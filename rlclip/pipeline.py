@@ -3,6 +3,7 @@
 import copy
 import csv
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -85,6 +86,11 @@ class Project:
             found, start = replay.candidates(self.video, info.duration, rcfg.get("dirs", []), rcfg.get("files", []))
         except Exception as e:  # rrrocket missing or failing shouldn't stop the analysis
             return [], [f"Replays not used: {e}"], []
+        if not found:
+            sources = list(rcfg.get("files", [])) + [d for d in rcfg.get("dirs", [])
+                                                     if Path(os.path.expanduser(d)).is_dir()]
+            when = f" (this recording started {replay.describe_time(start)})" if start else ""
+            return [], ([f"No saved replay matches this recording{when}."] if sources else []), []
         names = self.cfg["detection"].get("player_names") or []
         video_goals = [e.time for e in ocr if "GOAL" in e.label or e.label == "FAIL?"]
         events, notes, spans = [], [], []
@@ -95,8 +101,11 @@ class Project:
                 notes.append(f"Couldn't read replay {path.name}: {e}")
                 continue
             goals = [g.time for g in rep.events if g.label == "GOAL"]
-            prior = epoch - start if start else None
-            offset, hits = replay.align(goals, video_goals, prior)
+            offset, hits = None, 0
+            for prior in ([e - start for e in replay.match_starts(epoch)] if start else [None]):
+                o, h = replay.align(goals, video_goals, prior)
+                if o is not None and 0 <= o + 30 and o < info.duration and (offset is None or h > hits):
+                    offset, hits = o, h
             if offset is None:
                 notes.append(f"Replay {rep.name or path.name} ({rep.date}) didn't line up with this recording")
                 continue
