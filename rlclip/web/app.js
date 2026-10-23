@@ -642,10 +642,15 @@ $("#rv-open").onclick = () => {
 };
 $("#rv-choose").onclick = async () => {
   let paths;
-  if (window.pywebview?.api?.browse) paths = await window.pywebview.api.browse();
-  else { const p = prompt("Paste the full path of the recording of this match:"); paths = p ? [p] : []; }
-  const video = (paths || []).find(p => !p.toLowerCase().endsWith(".replay"));
-  if (!video) return;
+  if (window.pywebview?.api?.browse_video) paths = await window.pywebview.api.browse_video();
+  else { const p = prompt("Paste the full path of the recording (video file) of this match:"); paths = p ? [p] : []; }
+  if (!paths || !paths.length) return;   // cancelled
+  const video = paths.find(p => !p.toLowerCase().endsWith(".replay"));
+  if (!video) {
+    const r = state.replays.find(x => x.path === state.replaySel);
+    return alert("That's the replay file. Choose the video you recorded of this match" +
+                 (r?.date ? ` (it started ${r.date})` : "") + ", usually in your Videos folder.");
+  }
   try {
     const res = await api("/api/replay/pair", { replay: state.replaySel, video });
     await refreshState();

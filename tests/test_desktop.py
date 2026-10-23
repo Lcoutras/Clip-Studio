@@ -16,7 +16,7 @@ class DeepThing:
 def test_api_exposes_only_browse_functions():
     api = desktop.Api(window=DeepThing())
     public = [n for n in dir(api) if not n.startswith("_")]
-    assert sorted(public) == ["browse", "browse_folder"]
+    assert sorted(public) == ["browse", "browse_folder", "browse_video"]
     assert all(inspect.ismethod(getattr(api, n)) for n in public)
 
 

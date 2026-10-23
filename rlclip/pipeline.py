@@ -89,8 +89,8 @@ class Project:
         except Exception as e:  # rrrocket missing or failing shouldn't stop the analysis
             return [], [f"Replays not used: {e}"], []
         if not found:
-            sources = list(rcfg.get("files", [])) + [d for d in rcfg.get("dirs", [])
-                                                     if Path(os.path.expanduser(d)).is_dir()]
+            sources = list(rcfg.get("files", [])) + [d for d in replay.replay_folders(rcfg.get("dirs", []))
+                                                     if Path(d).is_dir()]
             when = f" (this recording started {replay.describe_time(start)})" if start else ""
             return [], ([f"No saved replay matches this recording{when}."] if sources else []), []
         names = self.cfg["detection"].get("player_names") or []
@@ -112,7 +112,8 @@ class Project:
                 if o is not None and 0 <= o + 30 and o < info.duration and (offset is None or h > hits):
                     offset, hits = o, h
             if offset is None:
-                notes.append(f"Replay {rep.name or path.name} ({rep.date}) didn't line up with this recording")
+                when = replay.describe_time(epoch) if epoch else rep.date
+                notes.append(f"Replay {rep.name or path.name} ({when}) didn't line up with this recording")
                 continue
             evs = replay.to_events(rep, offset, names, info.duration)
             if not evs:
@@ -120,7 +121,8 @@ class Project:
             events += evs
             spans.append((max(0.0, offset), min(info.duration, offset + rep.duration)))
             how = f"{hits} goals matched on screen" if hits else "lined up by clock time"
-            notes.append(f"Used replay {rep.name or path.name} ({rep.date}): {len(evs)} events, {how}")
+            when = replay.describe_time(rep.match_start_epoch) if rep.match_start_epoch else rep.date
+            notes.append(f"Used replay {rep.name or path.name} ({when}): {len(evs)} events, {how}")
         return events, notes, spans
 
     def notes(self):

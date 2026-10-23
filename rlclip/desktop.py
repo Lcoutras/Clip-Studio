@@ -41,11 +41,25 @@ class Api:
         paths = self._window.create_file_dialog(kind, allow_multiple=True, file_types=types)
         return list(paths or [])
 
+    def browse_video(self):
+        import webview
+        types = ("Videos (*.mp4;*.mkv;*.mov;*.flv;*.ts;*.webm;*.avi)", "All files (*.*)")
+        kind = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
+        paths = self._window.create_file_dialog(kind, allow_multiple=False, file_types=types,
+                                                directory=_videos_folder())
+        return list(paths or [])
+
     def browse_folder(self):
         import webview
         kind = webview.FileDialog.FOLDER if hasattr(webview, "FileDialog") else webview.FOLDER_DIALOG
         paths = self._window.create_file_dialog(kind)
         return list(paths or [])
+
+
+def _videos_folder():
+    import os
+    path = os.path.expanduser("~/Videos")
+    return path if os.path.isdir(path) else ""
 
 
 def _attach_drop(window, studio):

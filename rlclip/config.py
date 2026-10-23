@@ -53,12 +53,12 @@ DEFAULTS = {
         "show_event_label": True,
         "watermark": "",
     },
-    # Rocket League replays: Clip Studio looks in these folders (plus any you import) for the
-    # replays of matches in a recording, and uses them for exact events.
+    # Rocket League replays: Clip Studio always looks in the game's replay folders (Demos and
+    # DemosEpic in your Documents, even when Documents is in OneDrive), plus any folders listed
+    # here and any replays you import, and uses them for exact events.
     "replays": {
         "enabled": True,
-        "dirs": ["~/Documents/My Games/Rocket League/TAGame/Demos",
-                 "~/OneDrive/Documents/My Games/Rocket League/TAGame/Demos"],
+        "dirs": [],
         "files": [],
     },
     # In-app updates come from this public GitHub repository.

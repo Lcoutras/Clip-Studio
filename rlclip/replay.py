@@ -184,8 +184,22 @@ def load(path, on_progress=lambda m: None):
 
 # ---------------------------------------------------------------- matching replays to recordings
 
-DEFAULT_DIRS = ["~/Documents/My Games/Rocket League/TAGame/Demos",
-                "~/OneDrive/Documents/My Games/Rocket League/TAGame/Demos"]
+def documents_folder():
+    """The user's real Documents folder (on many PCs it's redirected into OneDrive)."""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0:   # 5 = My Documents
+            return buf.value
+    return os.path.expanduser("~/Documents")
+
+
+def replay_folders(extra_dirs=()):
+    """Where Rocket League saves replays: Demos (Steam) and DemosEpic (Epic Games)."""
+    base = os.path.join(documents_folder(), "My Games", "Rocket League", "TAGame")
+    found = [os.path.join(base, d) for d in ("Demos", "DemosEpic")]
+    return list(dict.fromkeys(found + [os.path.expanduser(d) for d in extra_dirs]))
 _STAMP = r"(\d{4})[-.](\d{2})[-.](\d{2})\D{1,3}(\d{2})[-.](\d{2})[-.](\d{2})"
 
 
@@ -224,18 +238,18 @@ def header(path):
 
 
 def match_starts(epoch):
-    """Possible match start times for a replay's MatchStartEpoch.
+    """Possible match start times for a replay's MatchStartEpoch, most likely first.
 
-    In a real replay, MatchStartEpoch read as UTC equals the replay's local "Date" stamp, so
-    Rocket League appears to store local wall-clock time in it. Rather than rely on that, try both
-    readings (true UTC and local wall clock); lining up with the recording picks the right one.
+    It's a normal UTC timestamp: a user's replay with MatchStartEpoch 23:44 UTC was saved at
+    7:55 PM local time (UTC-4). The replay's "Date" field is UTC too. The local wall-clock reading
+    is kept as a fallback; lining up with the recording picks whichever fits.
     """
     import datetime
     if not epoch:
         return []
     wall = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).replace(tzinfo=None)
-    local = wall.timestamp()     # that wall-clock time on this PC
-    return [epoch] if abs(local - epoch) < 1 else [local, epoch]
+    local = wall.timestamp()     # the same digits read as this PC's local time
+    return [epoch] if abs(local - epoch) < 1 else [epoch, local]
 
 
 def covers(video_path, duration, epoch):
@@ -278,7 +292,7 @@ def candidates(video_path, duration, dirs, extra=(), forced=()):
     """Replay files that could belong to this recording. `forced` ones were paired by the user."""
     from pathlib import Path
     files = [Path(p) for p in extra]
-    for d in dirs:
+    for d in replay_folders(dirs):
         folder = Path(os.path.expanduser(d))
         if folder.is_dir():
             files += sorted(folder.glob("*.replay"))

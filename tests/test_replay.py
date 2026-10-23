@@ -84,17 +84,18 @@ def test_recording_start_from_obs_and_nvidia_names(tmp_path):
         assert replay.recording_start(f) == datetime.datetime(2026, 10, 22, 23, 44, 9).timestamp()
 
 
-def test_match_start_tries_utc_and_local_wall_clock(monkeypatch):
+def test_match_start_reads_utc_first_with_local_fallback(monkeypatch):
     import os
     import time
     monkeypatch.setenv("TZ", "America/New_York")
     time.tzset()
     try:
-        epoch = 1792712667   # from a real replay: as UTC it reads 23:44:27, its local Date said 23:52:32
+        # A real replay: MatchStartEpoch is 23:44:27 UTC and its file was saved at 7:55 PM New York time.
+        epoch = 1792712667
         starts = replay.match_starts(epoch)
-        assert epoch in starts and len(starts) == 2
-        local = min(starts, key=lambda e: abs(e - epoch) if e != epoch else 1e9)
-        assert local - epoch == 4 * 3600   # New York in October is UTC-4
+        assert starts[0] == epoch                    # true UTC reading first
+        assert starts[1] - epoch == 4 * 3600         # fallback: same digits as local time (UTC-4)
+        assert replay.describe_time(epoch) == "Oct 22 at 7:44 PM"
     finally:
         monkeypatch.delenv("TZ")
         time.tzset()
@@ -111,3 +112,11 @@ def test_summary_shows_result_and_your_plays_once():
     assert info["result"] == "Won 6-3"
     labels = [(e["label"], e["mine"]) for e in info["timeline"]]
     assert labels == [("Goal", True), ("Epic Save", True), ("Goal", False)]
+
+
+def test_replay_folders_include_epic_and_steam(tmp_path, monkeypatch):
+    monkeypatch.setattr(replay, "documents_folder", lambda: str(tmp_path / "OneDrive" / "Documents"))
+    folders = replay.replay_folders(["~/extra"])
+    base = tmp_path / "OneDrive" / "Documents" / "My Games" / "Rocket League" / "TAGame"
+    assert str(base / "Demos") in folders and str(base / "DemosEpic") in folders
+    assert folders[-1].endswith("extra")
