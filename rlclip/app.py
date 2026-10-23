@@ -85,8 +85,21 @@ class Studio:
         return [Path(p) for p in self.settings["library"] if Path(p).is_file()]
 
     def import_paths(self, paths):
-        """Add video files (or every video in a folder) to the library. Returns names added."""
-        added = []
+        """Add video files (or every video in a folder) to the library. Returns names added.
+
+        .replay files are remembered too: they're matched to recordings when analyzing.
+        """
+        added, replays = [], []
+        for raw in paths:
+            p = Path(str(raw or "").strip().strip('"'))
+            for f in (sorted(p.glob("*.replay")) if p.is_dir() else [p]):
+                if f.suffix.lower() == ".replay" and f.is_file():
+                    if str(f) not in self.settings.setdefault("replays", []):
+                        self.settings["replays"].append(str(f))
+                    replays.append(f.name)
+        if replays and not any(Path(str(r or "").strip().strip('"')).suffix.lower() != ".replay" for r in paths):
+            self.save_settings()
+            return replays
         for raw in paths:
             if not raw:
                 continue
@@ -99,8 +112,8 @@ class Studio:
                     self.settings["library"].append(str(f))
                 added.append(f.name)
         self.save_settings()
-        if not added:
-            raise ValueError("No video files found there (mp4, mkv, mov...)")
+        if not added and not replays:
+            raise ValueError("No video or replay files found there (mp4, mkv, mov, replay...)")
         return added
 
     def remove(self, name):
@@ -177,6 +190,8 @@ class Studio:
     def analyze(self, name, rescan=False, speed="standard"):
         def run(job):
             proj = self.project(name)
+            proj.cfg = {**proj.cfg, "replays": {**proj.cfg.get("replays", {}),
+                                                "files": self.settings.get("replays", [])}}
             if speed in self.SPEEDS:
                 proj.cfg = {**proj.cfg, "detection": {**proj.cfg["detection"], "ocr_fps": self.SPEEDS[speed]}}
             job["message"] = "Analyzing audio..."
@@ -190,7 +205,9 @@ class Studio:
             _check(job)
             job.update(progress=96, message="Writing captions...")
             proj.write_captions(found, recaption=True)
-            job["message"] = f"Found {len(found)} suggested clips"
+            used = sum(1 for n in proj.notes() if n.startswith("Used replay"))
+            job["message"] = f"Found {len(found)} suggested clips" + (
+                f" ({used} replay{'s' if used != 1 else ''} used)" if used else "")
             if proj.warnings():
                 job["message"] += " (see the warning above the clip list)"
         return self.submit("analyze", name, run)
@@ -272,7 +289,8 @@ class Studio:
                 "rendered": self.media_url(rendered) + f"?v={int(rendered.stat().st_mtime)}"
                 if rendered.exists() else None,
             })
-        return {"clips": result, "source": "/source/" + _quote(name), "warnings": proj.warnings()}
+        return {"clips": result, "source": "/source/" + _quote(name), "warnings": proj.warnings(),
+                "notes": proj.notes()}
 
     def update_clip(self, name, clip, fields):
         proj = self.project(name)

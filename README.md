@@ -57,6 +57,19 @@ Exports go to `output\<recording name>\vertical\`. Highlight videos go to `outpu
 
 MKV recordings can be analyzed and exported, but they can't be previewed in the player. Use OBS **File → Remux Recordings** to make an MP4.
 
+## Rocket League replays (recommended)
+
+Save the replay after each match you record: on the end-of-match screen choose **Save Replay**. Rocket League puts replays in `Documents\My Games\Rocket League\TAGame\Demos`, and Clip Studio looks there automatically. You can also import `.replay` files with **Import**.
+
+When a recording has a matching replay, Clip Studio uses the replay's exact record of the match instead of reading the screen:
+- your goals (aerial goals marked), saves and epic saves, demos, post hits, and every assist on a teammate's goal
+- goals against you as **Fail?** suggestions
+- the real **shot speed** on the clip ("107 KM/H") and in the post title
+
+The replay is lined up with the recording using the time it started (from the file name, like OBS's `2026-10-22 23-44-09.mp4`), then fine-tuned by matching goals to the "SCORED!" banners on screen. A green note above the clip list says which replays were used.
+
+Clip Studio reads replays with [rrrocket](https://github.com/nickbabcock/rrrocket), a free, open-source tool. It downloads itself into `tools\` the first time it's needed.
+
 ## 4. Make clips without the app
 
 Drag a recording, or a whole folder of them, onto **`clip.bat`**. Results go to `output\<video name>\`:

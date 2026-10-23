@@ -17,7 +17,7 @@ from pathlib import PurePosixPath
 from . import __version__, config, ffmpeg
 
 # Top-level names an update never touches.
-KEEP = {"output", "music", "fonts", ".venv", "settings.yaml", "config.yaml", "config.old.yaml", ".git"}
+KEEP = {"output", "music", "fonts", "tools", ".venv", "settings.yaml", "config.yaml", "config.old.yaml", ".git"}
 
 
 def _get(url, timeout):

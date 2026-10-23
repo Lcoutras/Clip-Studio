@@ -15,3 +15,4 @@ fonts/*.otf
 *_calibrate.png
 settings.yaml
 config.old.yaml
+tools/

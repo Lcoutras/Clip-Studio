@@ -179,7 +179,7 @@ async function loadClips(resetSource) {
   try { data = await api(`/api/clips?video=${encodeURIComponent(state.current)}`); }
   catch (e) { return report(e); }
   state.clips = data.clips;
-  renderWarnings(data.warnings);
+  renderWarnings(data.warnings, data.notes);
   if (resetSource || state.source !== data.source) {
     state.source = data.source;
     $("#player-msg").hidden = true;
@@ -206,7 +206,7 @@ function visibleClips() {
     : list.sort((a, b) => a.anchor - b.anchor);
 }
 
-function renderWarnings(list) {
+function renderWarnings(list, notes) {
   const box = $("#warnings");
   box.innerHTML = "";
   for (const w of list || []) {
@@ -215,6 +215,14 @@ function renderWarnings(list) {
     box.appendChild(p);
   }
   box.hidden = !(list && list.length);
+  const nbox = $("#notes");
+  nbox.innerHTML = "";
+  for (const n of notes || []) {
+    const p = document.createElement("p");
+    p.textContent = (n.startsWith("Used replay") ? "\u2714 " : "\u2139 ") + n;
+    nbox.appendChild(p);
+  }
+  nbox.hidden = !(notes && notes.length);
 }
 
 function renderAll() {
@@ -510,6 +518,10 @@ async function importPaths(paths) {
   if (!paths || !paths.length) return;
   try {
     const res = await api("/api/import", { paths });
+    if (paths.every(p => p.toLowerCase().endsWith(".replay"))) {
+      alert(`Added ${res.added.length} replay${res.added.length === 1 ? "" : "s"}. Click Analyze (or Re-analyze) on the matching recording to use them.`);
+      return;
+    }
     await window.onImported(res.added);
   } catch (e) { report(e); }
 }

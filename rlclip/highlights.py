@@ -12,8 +12,10 @@ def category_of(label):
         return "Aerial"
     if label == "FAIL?":
         return "Fail?"
-    if label == "FUNNY MOMENT":
+    if label in ("FUNNY MOMENT", "POST"):
         return "Funny Moment"
+    if label == "AERIAL HIT":
+        return "Aerial"
     if label in ("HIGHLIGHT", "MANUAL"):
         return "Manual"
     if "SAVE" in label or label == "SAVIOR":
@@ -36,6 +38,7 @@ class Highlight:
     mood: str
     category: str = "Goal"
     reason: str = ""
+    stat: str = ""
     events: list = field(default_factory=list)
 
     def to_dict(self):
@@ -55,8 +58,14 @@ def _refine_with_audio(event, peaks):
 
 def _reason(group, reactions_db, mixed_audio=False):
     parts = []
+    # Most important first; minor replay details only when nothing bigger happened.
+    group = sorted(group, key=lambda e: -e.weight)
+    big = any(e.source == "replay" and e.weight >= 4 for e in group)
     for e in group:
-        if e.source == "ocr" and e.label == "FAIL?":
+        if e.source == "replay":
+            if not big or e.weight >= 4:
+                parts.append(e.detail)
+        elif e.source == "ocr" and e.label == "FAIL?":
             parts.append("someone else scored (could be a goal against you)")
         elif e.source == "ocr":
             parts.append(f"your {e.label} popup")
@@ -142,7 +151,8 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
         start, end = max(0.0, start), min(duration, end)
         highlights.append(Highlight(
             0, round(start, 2), round(end, 2), round(best.time, 2), best.label, round(score, 2),
-            best.mood, category_of(best.label), _reason(group, [db for _, db in reacts], mixed_audio), group))
+            best.mood, category_of(best.label), _reason(group, [db for _, db in reacts], mixed_audio),
+            getattr(best, "stat", ""), group))
 
     picked = []
     for h in sorted(highlights, key=lambda h: h.score, reverse=True):

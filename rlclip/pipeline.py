@@ -7,14 +7,14 @@ import re
 import shutil
 from pathlib import Path
 
-from . import captions, config, detect, ffmpeg, highlights, music, render
+from . import captions, config, detect, ffmpeg, highlights, music, render, replay
 
 # Bump when detection changes enough that old results should be thrown away.
-DETECTION_VERSION = 4
+DETECTION_VERSION = 5
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
-              "framing", "crop_x"]
+              "framing", "crop_x", "stat"]
 
 
 HASHTAGS = {
@@ -30,6 +30,8 @@ def post_text(row):
     category = row.get("category") or "Manual"
     caption = (row.get("caption") or "").strip()
     title = f"{caption} | Rocket League {category.rstrip('?')}" if caption else f"Rocket League {category}"
+    if row.get("stat"):
+        title += f" ({row['stat'].lower()})"
     tags = " ".join(["#rocketleague", HASHTAGS.get(category, "#rocketleagueclips"), "#rocketleagueclips",
                      "#gaming", "#shorts"])
     return f"{title}\n\n{tags}\n"
@@ -70,6 +72,50 @@ class Project:
         return self._info
 
     # ------------------------------------------------------------ step 1
+    def replay_events(self, ocr):
+        """Events from Rocket League replays of matches in this recording.
+
+        Returns (events, notes for the user, [(start, end)] recording spans the replays cover).
+        """
+        rcfg = self.cfg.get("replays", {})
+        if not rcfg.get("enabled", True):
+            return [], [], []
+        info = self.info
+        try:
+            found, start = replay.candidates(self.video, info.duration, rcfg.get("dirs", []), rcfg.get("files", []))
+        except Exception as e:  # rrrocket missing or failing shouldn't stop the analysis
+            return [], [f"Replays not used: {e}"], []
+        names = self.cfg["detection"].get("player_names") or []
+        video_goals = [e.time for e in ocr if "GOAL" in e.label or e.label == "FAIL?"]
+        events, notes, spans = [], [], []
+        for path, epoch in found:
+            try:
+                rep = replay.load(path)
+            except Exception as e:
+                notes.append(f"Couldn't read replay {path.name}: {e}")
+                continue
+            goals = [g.time for g in rep.events if g.label == "GOAL"]
+            prior = epoch - start if start else None
+            offset, hits = replay.align(goals, video_goals, prior)
+            if offset is None:
+                notes.append(f"Replay {rep.name or path.name} ({rep.date}) didn't line up with this recording")
+                continue
+            evs = replay.to_events(rep, offset, names, info.duration)
+            if not evs:
+                continue
+            events += evs
+            spans.append((max(0.0, offset), min(info.duration, offset + rep.duration)))
+            how = f"{hits} goals matched on screen" if hits else "lined up by clock time"
+            notes.append(f"Used replay {rep.name or path.name} ({rep.date}): {len(evs)} events, {how}")
+        return events, notes, spans
+
+    def notes(self):
+        try:
+            with open(self.highlights_path, encoding="utf-8") as f:
+                return json.load(f).get("notes", [])
+        except (OSError, ValueError, AttributeError):
+            return []
+
     def audio_warnings(self, game_track):
         """Plain-language problems with the recording's audio tracks."""
         info = self.info
@@ -137,6 +183,13 @@ class Project:
         if marker_file.exists():
             markers = detect.read_markers(marker_file)
             print(f"  markers: {len(markers)} from {marker_file.name}")
+        rep_events, notes, spans = self.replay_events(ocr)
+        if rep_events:
+            # The replay knows exactly what happened in its match: drop screen-reading guesses there.
+            ocr = [e for e in ocr if not any(a - 5 <= e.time <= b + 5 for a, b in spans)] + rep_events
+            reactions = [(t, db) for t, db in reactions if any(a <= t <= b for a, b in spans) or is_gameplay(t)]
+        for n in notes:
+            print(f"  {n}")
         found = highlights.build(ocr, peaks, markers, det, info.duration, reactions, mixed, is_gameplay)
         data = [h.to_dict() for h in found]
         # Old clips and captions belong to the old detection; clear them only now, so a cancelled
@@ -146,7 +199,8 @@ class Project:
         self.csv_path.unlink(missing_ok=True)
         self.out_dir.mkdir(parents=True, exist_ok=True)
         with open(self.highlights_path, "w", encoding="utf-8") as f:
-            json.dump({"version": DETECTION_VERSION, "highlights": data, "warnings": warnings}, f, indent=1)
+            json.dump({"version": DETECTION_VERSION, "highlights": data, "warnings": warnings,
+                       "notes": notes}, f, indent=1)
         for w in warnings:
             print(f"  ! {w}")
         print(f"  picked {len(data)} highlights")
@@ -165,7 +219,8 @@ class Project:
             hidden = category in self.cfg["detection"].get("hidden_categories", [])
             row = {"clip": h["index"], "label": h["label"], "category": category, "score": h["score"],
                    "start": h["start"], "end": h["end"], "anchor": h["anchor"], "music": "",
-                   "skip": "yes" if hidden else "", "reason": h.get("reason", ""), "source": "auto"}
+                   "skip": "yes" if hidden else "", "reason": h.get("reason", ""), "source": "auto",
+                   "stat": h.get("stat", "")}
             tone = picker.pick_tone()
             library_line = picker.from_library(h["label"], tone)
             ai_line = None
@@ -298,7 +353,7 @@ class Project:
             for layout in formats:
                 out = self.out_dir / layout / f"{name}.mp4"
                 render.render(cfg, video, game, anchor - start, layout, row["caption"], row["label"],
-                              song, out, work)
+                              song, out, work, stat=row.get("stat") or "")
                 out.with_suffix(".txt").write_text(post_text(row), encoding="utf-8")
                 made.append(out)
         shutil.rmtree(self.out_dir / "work", ignore_errors=True)

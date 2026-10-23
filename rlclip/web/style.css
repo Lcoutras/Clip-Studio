@@ -86,7 +86,9 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: v
 
 .warnings { margin: 12px 12px 0; padding: 8px 10px; border-radius: 8px; font-size: 12px;
   background: rgb(229 72 77 / .12); border: 1px solid rgb(229 72 77 / .5); color: var(--text); }
-.warnings p { margin: 0 0 4px; }
+.warnings p, .notes p { margin: 0 0 4px; }
+.notes { margin: 12px 12px 0; padding: 8px 10px; border-radius: 8px; font-size: 12px;
+  background: rgb(47 191 113 / .1); border: 1px solid rgb(47 191 113 / .45); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 12px 6px; }
 .chip { font-size: 12px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); background: transparent; display: flex; align-items: center; gap: 6px; }
 .chip .dot, .cliplist .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }

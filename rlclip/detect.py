@@ -46,8 +46,9 @@ class Event:
     label: str
     weight: float
     mood: str
-    source: str          # "ocr", "audio" or "marker"
+    source: str          # "ocr", "audio", "marker", "replay" or "reaction"
     detail: str = ""
+    stat: str = ""       # a number worth showing on the clip, e.g. "107 KM/H"
 
 
 def _normalize(text):

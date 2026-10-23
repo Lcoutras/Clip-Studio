@@ -63,6 +63,7 @@ def _draw_block(img, text, font_file, center_y, start_size, fill, max_lines=3, s
                   stroke_fill=(0, 0, 0, 140))
         draw.text((x, y), line, font=font, fill=fill, stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
         y += line_h
+    return y   # bottom of the block, so other text can go underneath
 
 
 def caption_image(text, size, layout, font_file, watermark=""):
@@ -87,12 +88,19 @@ def caption_image(text, size, layout, font_file, watermark=""):
     return img
 
 
-def label_image(label, size, layout, font_file):
-    """Big yellow stamp ("EPIC SAVE!") shown right at the moment of the play."""
+def label_image(label, size, layout, font_file, stat=""):
+    """Big yellow stamp ("EPIC SAVE!") shown right at the moment of the play, with an optional
+    stat underneath ("107 KM/H") when a replay provided one."""
     w, h = size
     img = Image.new("RGBA", size, (0, 0, 0, 0))
     center_y = int(h * (0.68 if layout == "vertical" else 0.8))
-    _draw_block(img, f"{label}!", font_file, center_y, 120 if layout == "vertical" else 96,
-                (255, 212, 0, 255), max_lines=2, stroke_ratio=0.1,
-                max_width=0.78 if layout == "vertical" else 0.88)
+    if stat:
+        center_y -= int(h * 0.02)   # make room for the stat line under the stamp
+    bottom = _draw_block(img, f"{label}!", font_file, center_y, 120 if layout == "vertical" else 96,
+                         (255, 212, 0, 255), max_lines=2, stroke_ratio=0.1,
+                         max_width=0.78 if layout == "vertical" else 0.88)
+    if stat:
+        size = 56 if layout == "vertical" else 48
+        _draw_block(img, stat.upper(), font_file, int(bottom + size * 0.75), size, (255, 255, 255, 255),
+                    max_lines=1)
     return img

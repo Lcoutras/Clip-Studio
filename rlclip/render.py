@@ -95,7 +95,7 @@ def _encoder_args(r):
     return ["-c:v", enc]
 
 
-def render(cfg, video, game, event_time, layout, caption, label, music, out_path, workdir):
+def render(cfg, video, game, event_time, layout, caption, label, music, out_path, workdir, stat=""):
     """music is None or (track_path, drop_time_seconds)."""
     r, a = cfg["render"], cfg["audio"]
     vinfo = ffmpeg.probe(video)
@@ -120,7 +120,7 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
     label_png = None
     if cfg["captions"]["show_event_label"] and label not in ("HYPE", "HIGHLIGHT", "FUNNY MOMENT", "FAIL?"):
         label_png = workdir / f"label_{layout}.png"
-        overlays.label_image(label, (W, H), layout, font).save(label_png)
+        overlays.label_image(label, (W, H), layout, font, stat).save(label_png)
 
     args = ["-i", video]
     graph = []

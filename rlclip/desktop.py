@@ -35,7 +35,8 @@ class Api:
 
     def browse(self):
         import webview
-        types = ("Videos (*.mp4;*.mkv;*.mov;*.flv;*.ts;*.webm;*.avi)", "All files (*.*)")
+        types = ("Videos and replays (*.mp4;*.mkv;*.mov;*.flv;*.ts;*.webm;*.avi;*.replay)",
+                 "Rocket League replays (*.replay)", "All files (*.*)")
         kind = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
         paths = self._window.create_file_dialog(kind, allow_multiple=True, file_types=types)
         return list(paths or [])
