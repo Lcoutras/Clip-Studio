@@ -106,6 +106,8 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: v
 .cliplist .meta { font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 .cliplist .why { grid-column: 2 / 4; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cliplist .done { color: var(--keep); font-size: 12px; }
+.cliplist li.progress-row { display: block; cursor: default; font-size: 12px; color: var(--muted); background: var(--panel-2); margin-bottom: 4px; }
+.cliplist li.progress-row:hover { background: var(--panel-2); }
 .list-actions { padding: 10px 12px 14px; display: grid; gap: 8px; border-top: 1px solid var(--line); }
 
 /* center */

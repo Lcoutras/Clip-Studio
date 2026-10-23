@@ -326,6 +326,7 @@ class Studio:
             scanned = saved is not None and proj.csv_path.exists()
             rows = proj.read_rows() if scanned else []
             videos.append({"name": path.name, "path": str(path), "scanned": scanned,
+                           "label": self.recording_label(path),
                            "clips": len(rows), "kept": sum(1 for r in rows if not pipeline.is_skipped(r)),
                            "flagged": sum(1 for r in rows if r.get("flag"))})
         lib = music.MusicLibrary(self.cfg)
@@ -338,28 +339,81 @@ class Studio:
                 "hidden_categories": self.cfg["detection"].get("hidden_categories", []),
                 "format": self.formats()[0], "version": __version__, "update": self.update}
 
+    def recording_label(self, path):
+        """'Oct 23, 12:41 AM' from the recording's start time, or its file name."""
+        import datetime
+        start = replay.recording_start(path)
+        if start is None:
+            return Path(path).stem
+        return datetime.datetime.fromtimestamp(start).strftime("%b %d, %I:%M %p").replace(" 0", " ")
+
     def clips(self, name):
-        proj = self.project(name)
-        if not proj.csv_path.exists():
-            return {"clips": [], "source": "/source/" + _quote(name), "warnings": []}
+        """Clips of one recording, or of every analyzed recording when name is "*"."""
+        videos = self.library() if name == "*" else [self.video(name)]
         layout = self.formats()[0]
-        result = []
-        for row in proj.read_rows():
-            rendered = proj.out_dir / layout / f"{proj.output_name(row)}.mp4"
-            result.append({
-                **row, "clip": int(row["clip"]), "start": float(row["start"]), "end": float(row["end"]),
-                "anchor": float(row["anchor"]), "skip": pipeline.is_skipped(row),
-                "category": row.get("category") or highlights.category_of(row["label"]),
-                "game_volume": float(row.get("game_volume") or 100),
-                "music_volume": float(row.get("music_volume") or 100),
-                "framing": row.get("framing") or self.cfg["render"]["vertical_style"],
-                "crop_x": float(row.get("crop_x") or 0.5),
-                "flag": bool(row.get("flag")), "note": row.get("note") or "",
-                "rendered": self.media_url(rendered) + f"?v={int(rendered.stat().st_mtime)}"
-                if rendered.exists() else None,
-            })
-        return {"clips": result, "source": "/source/" + _quote(name), "warnings": proj.warnings(),
-                "notes": proj.notes()}
+        result, sources, warnings, notes = [], {}, {}, {}
+        for video in videos:
+            proj = pipeline.Project(video, self.cfg)
+            sources[video.name] = "/source/" + _quote(video.name)
+            if not proj.csv_path.exists() or proj.load_highlights() is None:
+                continue
+            warnings[video.name], notes[video.name] = proj.warnings(), proj.notes()
+            started = replay.recording_start(video) or video.stat().st_mtime
+            label = self.recording_label(video)
+            for row in proj.read_rows():
+                rendered = proj.out_dir / layout / f"{proj.output_name(row)}.mp4"
+                result.append({
+                    **row, "video": video.name, "rec_label": label, "rec_start": started,
+                    "clip": int(row["clip"]), "start": float(row["start"]), "end": float(row["end"]),
+                    "anchor": float(row["anchor"]), "skip": pipeline.is_skipped(row),
+                    "category": row.get("category") or highlights.category_of(row["label"]),
+                    "game_volume": float(row.get("game_volume") or 100),
+                    "music_volume": float(row.get("music_volume") or 100),
+                    "framing": row.get("framing") or self.cfg["render"]["vertical_style"],
+                    "crop_x": float(row.get("crop_x") or 0.5),
+                    "flag": bool(row.get("flag")), "note": row.get("note") or "",
+                    "rendered": self.media_url(rendered) + f"?v={int(rendered.stat().st_mtime)}"
+                    if rendered.exists() else None,
+                })
+        return {"clips": result, "sources": sources, "warnings": warnings, "notes": notes}
+
+    def analyze_all(self, speed="standard"):
+        """Analyze every recording that hasn't been analyzed and isn't already queued."""
+        started = []
+        for video in self.library():
+            proj = pipeline.Project(video, self.cfg)
+            busy = any(j["video"] == video.name and j["status"] in ("queued", "running") for j in self.jobs)
+            if not busy and (proj.load_highlights() is None or not proj.csv_path.exists()):
+                self.analyze(video.name, speed=speed)
+                started.append(video.name)
+        return started
+
+    def compile_items(self, items):
+        """Highlight video from clips of any recordings: items = [(video name, clip number)] in order."""
+        def run(job):
+            layout = self.formats()[0]
+            parts = []
+            for i, (name, clip) in enumerate(items):
+                _check(job)
+                proj = self.project(name)
+                row = next((r for r in proj.read_rows() if int(r["clip"]) == int(clip)), None)
+                if row is None or pipeline.is_skipped(row):
+                    continue
+                out = proj.out_dir / layout / f"{proj.output_name(row)}.mp4"
+                if not out.exists():
+                    job.update(progress=round(80 * i / max(1, len(items))),
+                               message=f"Exporting clip {i + 1} of {len(items)} first...")
+                    proj.render_all([row], self.formats())
+                parts.append(out)
+            _check(job)
+            if not parts:
+                raise RuntimeError("No kept clips to join")
+            job.update(progress=85, message=f"Joining {len(parts)} clips...")
+            import time as _time
+            out = self.out_root / "highlights" / f"HIGHLIGHTS_{_time.strftime('%Y-%m-%d_%H-%M-%S')}_{layout}.mp4"
+            pipeline.join_clips(parts, out, self.cfg["render"]["fps"])
+            job.update(message=f"Highlight video saved: {out.name}", result=self.media_url(out))
+        return self.submit("compile", "all recordings", run)
 
     def update_clip(self, name, clip, fields):
         proj = self.project(name)
@@ -521,7 +575,11 @@ def make_handler(studio):
                 if path == "/api/export":
                     return self._json(studio.export(data["video"], [int(c) for c in data["clips"]]))
                 if path == "/api/compile":
+                    if "items" in data:
+                        return self._json(studio.compile_items([(v, int(c)) for v, c in data["items"]]))
                     return self._json(studio.compile(data["video"], [int(c) for c in data["clips"]]))
+                if path == "/api/analyze_all":
+                    return self._json({"started": studio.analyze_all(data.get("speed", "standard"))})
                 if path == "/api/clip":
                     studio.update_clip(data["video"], int(data["clip"]), data["fields"])
                     return self._json({"ok": True})

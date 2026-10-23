@@ -38,6 +38,25 @@ def post_text(row):
     return f"{title}\n\n{tags}\n"
 
 
+def join_clips(parts, out, fps):
+    """Join exported clips (in order) into one video. Parts may come from different recordings."""
+    first = ffmpeg.probe(parts[0])
+    args, graph = [], []
+    for i, p in enumerate(parts):
+        args += ["-i", p]
+        # Make every part identical in size, pixel shape, frame rate and audio format.
+        graph.append(f"[{i}:v:0]scale={first.width}:{first.height},setsar=1,fps={fps},format=yuv420p[v{i}];"
+                     f"[{i}:a:0]aresample=48000,aformat=channel_layouts=stereo[a{i}]")
+    streams = "".join(f"[v{i}][a{i}]" for i in range(len(parts)))
+    graph.append(f"{streams}concat=n={len(parts)}:v=1:a=1[v][a]")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    args += ["-filter_complex", ";".join(graph),
+             "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
+             "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]
+    ffmpeg.run(args)
+    return Path(out)
+
+
 def is_skipped(row):
     return str(row.get("skip") or "").strip().lower() in ("y", "yes", "x", "1", "true")
 
@@ -311,23 +330,9 @@ class Project:
         if not parts:
             raise RuntimeError("Export the clips first, then build the highlight video from them")
         out = self.out_dir / f"{self.video.stem}_HIGHLIGHTS_{layout}.mp4"
-        first = ffmpeg.probe(parts[0])
-        fps = self.cfg["render"]["fps"]
-        args, graph = [], []
-        for i, p in enumerate(parts):
-            args += ["-i", p]
-            # Make every part identical in size, pixel shape, frame rate and audio format.
-            graph.append(f"[{i}:v:0]scale={first.width}:{first.height},setsar=1,fps={fps},format=yuv420p[v{i}];"
-                         f"[{i}:a:0]aresample=48000,aformat=channel_layouts=stereo[a{i}]")
-        streams = "".join(f"[v{i}][a{i}]" for i in range(len(parts)))
-        graph.append(f"{streams}concat=n={len(parts)}:v=1:a=1[v][a]")
-        args += ["-filter_complex", ";".join(graph),
-                 "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "medium", "-crf", "20",
-                 "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]
         if on_progress:
             on_progress(f"Joining {len(parts)} clips...")
-        ffmpeg.run(args)
-        return out
+        return join_clips(parts, out, self.cfg["render"]["fps"])
 
     # ------------------------------------------------------------ step 3
     def output_name(self, row):

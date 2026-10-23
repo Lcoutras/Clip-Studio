@@ -33,9 +33,9 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 
 **Import → Analyze → Review → Edit → Export**
 
-1. **Import:** drag a recording onto the window, or click **Import** to browse. Analysis starts on its own.
+1. **Import:** drag one or more recordings (or a folder) onto the window, or click **Import** to browse. Analysis starts on its own, one recording after another.
 2. **Analyze:** Clip Studio reads the game's popups, listens for goal explosions, and picks up reactions on your mic track. A reaction right after a play stays in that clip, and replays don't become separate clips.
-3. **Review:** suggested clips appear on the left, labeled **Goal, Aerial, Save, Demo, Assist, Funny Moment, Fail?** with the reason each was picked.
+3. **Review:** the recording menu at the top starts on **All recordings**, so clips from every recording show up in one list as each one finishes analyzing (a ⏳ row at the top shows what's still running). Each clip says which recording it's from, and clicking it loads that recording in the player. Pick a single recording in the menu to see only its clips. Suggested clips are labeled **Goal, Aerial, Save, Demo, Assist, Funny Moment, Fail?** with the reason each was picked.
    - Click a category chip to hide or show that type.
    - **Fail?** clips (someone else scored) start out removed. Tick **Show removed** to see them.
    - Missed something? Scrub the **Whole recording** bar and click **+ Add moment here**.
@@ -44,7 +44,7 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
    - **Caption** (🎲 gives another one), **Music**, **Game/Music volume**, and **Framing** (Full view or Zoom to fill, with a position slider).
    - **Kept / Removed** decides whether the clip gets exported.
    - **🚩 Flag** (or press **F**) marks a clip to come back to, with an optional note. Tick **🚩 Flagged only** in the list to see just those. The recording menu shows how many are waiting ("🚩 3 to review"), and flags survive re-analysis.
-5. **Export:** **Export this clip** saves a single clip. **Export kept clips** saves all of them. **Build highlight video** joins the kept clips into one video.
+5. **Export:** **Export this clip** saves a single clip. **Export kept clips** saves all of them. **Build highlight video** joins the kept clips into one video. In **All recordings** it uses kept clips from every recording, in recording order.
 
 **Analysis speed:** the menu next to **Analyze** offers **Standard** (checks the screen every second) and **Fast** (every 2 seconds, about twice as quick; a popup shown for under 2 seconds can be missed). Either way, stretches where the screen doesn't change (menus, loading screens, pauses) are skipped automatically.
 
@@ -54,7 +54,7 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 
 Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** remove/keep, **F** flag.
 
-Exports go to `output\<recording name>\vertical\`. Highlight videos go to `output\<recording name>\`. The **Open output folder** link takes you there.
+Exports go to `output\<recording name>\vertical\`. Highlight videos go to `output\<recording name>\`, or `output\highlights\` when built from All recordings. The **Open output folder** link takes you there.
 
 MKV recordings can be analyzed and exported, but they can't be previewed in the player. Use OBS **File → Remux Recordings** to make an MP4.
 
