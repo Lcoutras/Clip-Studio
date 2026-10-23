@@ -214,23 +214,51 @@ def _scan_geometry(info, region, width):
     return cw, ch, cx, cy, ow, oh
 
 
-# Average change between samples a second apart. Menus, lobbies and loading screens barely
-# move (measured 2.6-6 on a real Rocket League menu); a match, where the camera follows the
-# ball, changes far more.
-GAMEPLAY_MOTION = 9.0
+# The match scoreboard at the top centre: your team's score box, the clock, the other team's box.
+# It's only on screen during a live match (also in replays), never in menus, loading screens or the
+# stadium intro. Fractions of the frame; the boxes are blue and orange, in either order.
+SCOREBOARD = (0.38, 0.0, 0.62, 0.12)                  # strip that's scanned (x1, y1, x2, y2)
+_BOX_Y = (0.10, 0.92)                                  # boxes' rows inside that strip
+_BOX_LEFT, _BOX_RIGHT = (0.0625, 0.3125), (0.729, 0.979)
+
+
+def scoreboard_visible(strip_bgr):
+    """True when the strip shows a saturated blue box on one side and an orange one on the other.
+    Measured on real frames: menus, loading screens and the stadium intro show no orange there."""
+    h, w = strip_bgr.shape[:2]
+    rows = strip_bgr[int(h * _BOX_Y[0]):int(h * _BOX_Y[1])].astype(np.int16)
+
+    def colours(x0, x1):
+        p = rows[:, int(w * x0):int(w * x1)]
+        b, g, r = p[..., 0], p[..., 1], p[..., 2]
+        blue = ((b > 150) & (r < 110) & (b > g + 60)).mean()
+        orange = ((r > 170) & (r > g + 40) & (g > 50) & (b < 120)).mean()
+        return blue, orange
+
+    lb, lo = colours(*_BOX_LEFT)
+    rb, ro = colours(*_BOX_RIGHT)
+    return bool((lb > 0.15 and ro > 0.15) or (lo > 0.15 and rb > 0.15))
 
 
 def ocr_events(info, det, progress=True, on_progress=None, timeline=None):
     """Scan the whole recording for stat-feed popups.
 
-    If `timeline` is a list, (time, motion) is appended for every sample; see is_gameplay().
+    If `timeline` is a list, (time, motion, scoreboard) is appended for every sample;
+    see gameplay_checker().
     """
     fps = det["ocr_fps"]
     cw, ch, cx, cy, ow, oh = _scan_geometry(info, det["ocr_region"], det["ocr_width"])
-    vf = f"fps={fps},crop={cw}:{ch}:{cx}:{cy},scale={ow}:{oh}"
-    proc = ffmpeg.pipe(["-i", str(info.path), "-an", "-vf", vf, "-f", "rawvideo", "-pix_fmt", "bgr24", "-"])
+    # The scoreboard strip is stacked under the text area so each frame is decoded only once.
+    sx1, sy1, sx2, sy2 = SCOREBOARD
+    sw, sh = int(info.width * (sx2 - sx1)) // 2 * 2, max(2, int(info.height * (sy2 - sy1)) // 2 * 2)
+    sbh = max(2, int(round(sh * ow / sw / 2)) * 2)
+    graph = (f"[0:v]fps={fps},split[a][b];[a]crop={cw}:{ch}:{cx}:{cy},scale={ow}:{oh}[t];"
+             f"[b]crop={sw}:{sh}:{int(info.width * sx1)}:{int(info.height * sy1)},scale={ow}:{sbh}[s];"
+             f"[t][s]vstack")
+    proc = ffmpeg.pipe(["-i", str(info.path), "-an", "-filter_complex", graph,
+                        "-f", "rawvideo", "-pix_fmt", "bgr24", "-"])
     engine = _ocr_engine()
-    frame_bytes = ow * oh * 3
+    frame_bytes = ow * (oh + sbh) * 3
     names = det.get("player_names") or []
 
     events, last_seen = [], {}
@@ -242,7 +270,8 @@ def ocr_events(info, det, progress=True, on_progress=None, timeline=None):
             break
         t = i / fps
         i += 1
-        img = np.frombuffer(buf, dtype=np.uint8).reshape(oh, ow, 3)
+        stacked = np.frombuffer(buf, dtype=np.uint8).reshape(oh + sbh, ow, 3)
+        img, strip = stacked[:oh], stacked[oh:]
         # Menus, loading screens and pauses don't change between samples; an unchanged frame
         # reads the same, so reuse the last result instead of running OCR again.
         thumb = img[::8, ::8].astype(np.int16)
@@ -254,7 +283,7 @@ def ocr_events(info, det, progress=True, on_progress=None, timeline=None):
         if timeline is not None:
             # Motion per second, so Fast mode (a sample every 2s) uses the same scale.
             motion = 99.0 if prev_thumb is None else float(np.abs(thumb - prev_thumb).mean()) * fps
-            timeline.append((t, motion))
+            timeline.append((t, motion, scoreboard_visible(strip)))
         prev_thumb, prev_lines = thumb, lines
         texts = [text for text, conf in lines if conf >= det["ocr_min_confidence"]]
         for kw, mine in classify_frame(texts, names):
@@ -303,16 +332,23 @@ def ocr_frame(info, det, at):
 
 
 def gameplay_checker(timeline):
-    """Returns is_gameplay(t): True when the footage around t is moving like a match."""
+    """Returns is_gameplay(t): True when the match scoreboard is on screen around t.
+
+    Movement alone isn't enough: the stadium fly-over before kickoff moves as much as a match.
+    If a recording never shows the scoreboard (too few sightings to trust), nothing counts as
+    gameplay; is_gameplay.scoreboard_seen tells the caller so it can explain.
+    """
     import bisect
-    times = [t for t, _ in timeline]
+    times = [entry[0] for entry in timeline]
+    seen = sum(1 for entry in timeline if len(entry) > 2 and entry[2]) >= 3
 
     def is_gameplay(t):
+        if not seen:
+            return False
         lo, hi = bisect.bisect_left(times, t - 3), bisect.bisect_right(times, t + 1)
-        window = sorted(m for _, m in timeline[lo:hi])
-        if not window:
-            return True  # nothing known about that moment
-        return window[len(window) // 2] >= GAMEPLAY_MOTION
+        window = timeline[lo:hi]
+        return bool(window) and sum(1 for entry in window if entry[2]) * 2 > len(window)
+    is_gameplay.scoreboard_seen = seen
     return is_gameplay
 
 

@@ -102,14 +102,24 @@ def test_other_players_goal_is_a_possible_fail():
 def test_reactions_in_menus_are_ignored():
     """Talking in the main menu once became a 'Funny Moment' clip of the menu."""
     det = config.load()["detection"]
-    menu = [(t, 3.0) for t in range(0, 60)]          # menu: barely moves (real menu measured 2.6-6)
-    match = [(t, 30.0) for t in range(60, 120)]       # match: the camera is always moving
+    menu = [(t, 3.0, False) for t in range(0, 60)]        # menu: no match scoreboard
+    match = [(t, 30.0, True) for t in range(60, 120)]      # match: scoreboard on screen
     is_gameplay = detect.gameplay_checker(menu + match)
     reactions = [(30.0, 25.0), (90.0, 25.0)]
     fails = [detect.Event(40.0, "FAIL?", 5, "funny", "ocr"), detect.Event(100.0, "FAIL?", 5, "funny", "ocr")]
     found = highlights.build(fails, [], [], det, 200, reactions, is_gameplay=is_gameplay)
     assert all(h.anchor >= 60 for h in found)
     assert {h.category for h in found} == {"Funny Moment", "Fail?"}
+
+
+def test_no_scoreboard_means_no_reaction_clips():
+    """A clip of the menu, loading screen and stadium intro never shows a scoreboard; its
+    movement looks like a match, so movement alone must not decide."""
+    det = config.load()["detection"]
+    intro = [(t, 45.0, False) for t in range(0, 40)]
+    is_gameplay = detect.gameplay_checker(intro)
+    assert not is_gameplay.scoreboard_seen
+    assert highlights.build([], [], [], det, 40, [(20.0, 30.0)], is_gameplay=is_gameplay) == []
 
 
 def test_caption_library_is_short_and_valid():
@@ -133,3 +143,30 @@ def test_old_config_yaml_migrates_personal_settings_only(tmp_path, monkeypatch):
     assert cfg["detection"]["pre_seconds"] == config.DEFAULTS["detection"]["pre_seconds"]  # new default wins
     assert (tmp_path / "settings.yaml").exists() and (tmp_path / "config.old.yaml").exists()
     assert not (tmp_path / "config.yaml").exists()
+
+
+def test_scoreboard_only_during_matches():
+    """Strips cut from real frames: two live matches (your team's box is on the left, so the
+    colours swap) and the menu, loading screen and stadium intro that once became clips."""
+    import numpy as np
+    from PIL import Image
+    folder = config.ROOT / "tests" / "fixtures" / "scoreboard"
+    def visible(name):
+        rgb = np.asarray(Image.open(folder / name).convert("RGB"))
+        return detect.scoreboard_visible(rgb[..., ::-1])   # the scan hands over BGR
+    assert visible("match_orange_left.png") and visible("match_blue_left.png")
+    for name in ("main_menu.png", "main_menu_2.png", "loading.png", "stadium_intro.png", "team_intro_vs.png"):
+        assert not visible(name), name
+
+
+def test_gameplay_uses_scoreboard_when_seen_and_keeps_post_goal_reactions():
+    det = config.load()["detection"]
+    timeline = [(t, 40.0, False) for t in range(0, 60)]     # stadium intro: lots of movement, no scoreboard
+    timeline += [(t, 30.0, True) for t in range(60, 120)]   # the match
+    timeline += [(t, 30.0, False) for t in range(120, 135)] # goal replay hides the scoreboard
+    is_gameplay = detect.gameplay_checker(timeline)
+    assert not is_gameplay(30) and is_gameplay(90)
+    goal = [detect.Event(118.0, "GOAL", 7, "hype", "ocr", "GOAL +100")]
+    found = highlights.build(goal, [], [], det, 200, [(30.0, 25.0), (123.0, 25.0)], is_gameplay=is_gameplay)
+    assert [h.label for h in found] == ["GOAL"]               # no clip from the intro
+    assert found[0].end >= 123.0                             # the celebration during the replay is kept

@@ -93,7 +93,7 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
     outside gameplay (menus, lobby, loading screens) are ignored: shouting in the menu isn't a clip.
     """
     is_gameplay = is_gameplay or (lambda t: True)
-    reactions = [(t, db) for t, db in reactions or [] if is_gameplay(t)]
+    reactions = list(reactions or [])
     ocr_events = [e for e in ocr_events if e.label != "FAIL?" or is_gameplay(e.time)]
     events = []
     for e in ocr_events:
@@ -114,6 +114,9 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
             attached.setdefault(id(owner), []).append((t, db))
         else:
             standalone.append((t, db))
+    # A reaction on its own only counts during a match (not in menus, loading screens or intros).
+    # Reactions right after a play were kept above even if the goal replay hid the scoreboard.
+    standalone = [(t, db) for t, db in standalone if is_gameplay(t)]
     for t, db in standalone:
         # With voices mixed into the game audio, a "reaction" may just be a loud game sound.
         weight = min(5.5 if mixed_audio else 7.0, 3 + (db - det["reaction_db"]) / 3)

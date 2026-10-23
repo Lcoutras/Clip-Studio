@@ -11,7 +11,7 @@ from pathlib import Path
 from . import captions, config, detect, ffmpeg, highlights, music, render, replay
 
 # Bump when detection changes enough that old results should be thrown away.
-DETECTION_VERSION = 5
+DETECTION_VERSION = 6
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
@@ -184,6 +184,8 @@ class Project:
         ocr = detect.ocr_events(info, det, on_progress=on_progress, timeline=timeline)
         is_gameplay = detect.gameplay_checker(timeline)
         warnings = self.audio_warnings(track)
+        scoreboard_note = [] if is_gameplay.scoreboard_seen else [
+            "The match scoreboard wasn't visible in this recording, so voice reactions weren't used for clips."]
         # Reactions: your mic track when voices are recorded separately, otherwise loud moments
         # in the mixed audio that aren't the goal explosion itself.
         voice = self.cfg["audio"]["voice_track"]
@@ -204,6 +206,7 @@ class Project:
             # The replay knows exactly what happened in its match: drop screen-reading guesses there.
             ocr = [e for e in ocr if not any(a - 5 <= e.time <= b + 5 for a, b in spans)] + rep_events
             reactions = [(t, db) for t, db in reactions if any(a <= t <= b for a, b in spans) or is_gameplay(t)]
+        notes = scoreboard_note + notes
         for n in notes:
             print(f"  {n}")
         found = highlights.build(ocr, peaks, markers, det, info.duration, reactions, mixed, is_gameplay)
