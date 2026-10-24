@@ -35,6 +35,11 @@ EVENTS = {
     "SAVE": ("SAVE", 4, "chill"),
     "ASSIST": ("ASSIST", 6, "hype"),   # your pass set up a goal: a clip on its own
     "SHOT ON GOAL": ("SHOT", 1, "chill"),
+    # Smaller plays: a clip when the game audio says it was a big hit (see highlights.MINOR).
+    "BICYCLE HIT": ("BICYCLE HIT", 5, "hype"),
+    "AERIAL HIT": ("AERIAL HIT", 4.5, "hype"),
+    "CLEAR BALL": ("CLEAR", 4.5, "hype"),
+    "CENTER BALL": ("CENTER", 4.5, "hype"),
 }
 # Longest first so "EPIC SAVE" wins over "SAVE" and "AERIAL GOAL" over "GOAL".
 _KEYWORDS = sorted(EVENTS, key=len, reverse=True)
@@ -309,7 +314,7 @@ def ocr_events(info, det, progress=True, on_progress=None, timeline=None):
             events.append(Event(max(0.0, t - det["ocr_delay"]), label, weight, mood, "ocr", " ".join(texts)))
         if other_scorer(texts, names) and t - last_seen.get("OTHER", -99) >= 8:
             last_seen["OTHER"] = t
-            events.append(Event(max(0.0, t - det["ocr_delay"]), "FAIL?", 5, "funny", "ocr", " ".join(texts)))
+            events.append(Event(max(0.0, t - det["ocr_delay"]), "OTHER GOAL", 5, "hype", "ocr", " ".join(texts)))
         if on_progress and i % max(1, int(10 * fps)) == 0:
             try:
                 on_progress(min(100.0, 100 * t / info.duration), len(events))
@@ -397,3 +402,26 @@ def read_markers(path):
                 continue
             events.append(Event(t, "HIGHLIGHT", 100, "hype", "marker", note.strip()))
     return events
+
+
+def game_audio_features(path, track, at, rate=8000):
+    """What the game audio does around a moment, for telling post hits and close calls apart from
+    ordinary play: the loudest hit near it (dB above the second before), and the crowd swell after
+    it (dB, the 0.5-3 s after compared with the 3-1 s before). Measured on your clips to tune detection."""
+    import numpy as np
+    start = max(0.0, at - 3.0)
+    samples = ffmpeg.read_audio(path, track, rate=rate, start=start, duration=6.5)
+    hop = int(rate * 0.05)
+    if samples.size < hop * 40:
+        return None
+    frames = samples[: samples.size // hop * hop].reshape(-1, hop)
+    db = 20 * np.log10(np.sqrt((frames ** 2).mean(axis=1)) + 1e-6)
+    t = np.arange(len(db)) * 0.05 + start
+    def mean(a, b):
+        sel = db[(t >= at + a) & (t < at + b)]
+        return float(sel.mean()) if sel.size else float("nan")
+    near = db[(t >= at - 1.5) & (t <= at + 1.5)]
+    before = mean(-2.5, -1.5)
+    return {"hit_db": round(float(near.max()) - before, 1) if near.size else None,
+            "swell_db": round(mean(0.5, 3.0) - mean(-3.0, -1.0), 1),
+            "level_db": round(float(near.max()), 1) if near.size else None}

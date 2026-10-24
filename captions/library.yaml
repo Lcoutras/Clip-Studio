@@ -2,6 +2,67 @@
 # The tool looks for the clip's exact label first (e.g. "AERIAL GOAL"), then its
 # family (GOAL / SAVE / DEMO), then ANY. Each section has funny and motivational lines.
 
+TEAM GOAL:
+  funny:
+    - Teamwork makes the dream work
+    - "My teammate: carried. Me: watched."
+    - I was the decoy. Obviously.
+    - Proud dad moment
+  motivational:
+    - Trust your teammates
+    - Win together
+    - The squad makes the game
+
+GOAL AGAINST:
+  funny:
+    - "Defense? Never heard of her"
+    - Rotation? Never heard of it
+    - That one's on the lag
+    - The net was open for business
+  motivational:
+    - Next kickoff, we answer
+    - Short memory, big comeback
+    - Reset. Refocus. Run it back.
+
+OTHER GOAL:
+  funny:
+    - Somebody scored. Vibes were had.
+    - The net felt that one
+  motivational:
+    - Every goal changes the game
+    - Next kickoff decides it
+
+CLEAR:
+  funny:
+    - Not in my house
+    - Return to sender
+    - Get that out of here
+    - Ball said bye
+  motivational:
+    - Defense wins games
+    - Clutch clears win matches
+    - Do the dirty work
+
+CENTER:
+  funny:
+    - Served on a silver platter
+    - Pass so clean it squeaks
+    - Open net delivery service
+  motivational:
+    - Set up the play
+    - Find the open teammate
+    - Great plays start with a center
+
+AERIAL HIT:
+  funny:
+    - Gravity is optional
+    - Air traffic control is worried
+    - Wheels up
+  motivational:
+    - Take it to the sky
+    - Aim higher. Literally.
+    - Own the air
+
 ASSIST:
   funny:
     - "Postmates: we deliver"
@@ -207,6 +268,7 @@ FUNNY MOMENT:
 
 FAIL?:
   funny:
+    - Blooper reel material
     - "POV: my teammate in ranked"
     - Ball chasing, a love story
     - Whiff of the year nominee

@@ -36,6 +36,7 @@ def test_repeated_rejections_rank_that_kind_lower(tmp_path):
     assert any("voice reactions" in r for r in fb.rules())
 
     det = config.load()["detection"]
+    det["reactions_alone"] = True   # the option this test is about
     report = {}
     found = highlights.build([], [(99.0, 15.0)], [], det, 300, [(100.0, 22.0)], learned=learned, report=report)
     assert found == [] and report["lowered"] == {"reaction": 1}
@@ -76,6 +77,7 @@ def test_rejected_screen_is_recognized():
     assert not feedback.looks_rejected([noisy.tobytes(), other.tobytes(), other.tobytes()], screens)
 
     det = config.load()["detection"]
+    det["reactions_alone"] = True   # the option this test is about
     report = {}
     found = highlights.build([], [(99.0, 15.0)], [], det, 300, [(100.0, 22.0)], veto=lambda h: True, report=report)
     assert found == [] and report["vetoed"] == 1

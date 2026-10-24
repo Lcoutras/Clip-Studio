@@ -32,9 +32,15 @@ DEFAULTS = {
         "reaction_tail": 1.5,
         # A voice reaction on its own only becomes a clip when the game made a sound just before it,
         # and at most this many per 10 minutes of recording (the loudest win).
+        # Game first: by default your mic only adds to a play the game showed (goal, save, demo,
+        # post...). Set true to also let a big reaction on its own become a clip.
+        "reactions_alone": False,
         "reaction_needs_game_sound": True,
         "max_reactions_per_10min": 3,
-        "hidden_categories": ["Fail?"],
+        "hidden_categories": [],
+        # Clears, centers and aerial touches only become clips with a big hit in the game audio,
+        # and at most this many per 10 minutes (the best ones).
+        "max_minor_per_10min": 3,
         # Tuned from what the Clip Agent learned (see agent/README.md). Points added to a kind
         # of clip's score ({"reaction": -2, "popup:ASSIST": 1}), and seconds to move the
         # start/end of a category's clips ({"Goal": [-1.5, 0.5]}).
@@ -52,7 +58,7 @@ DEFAULTS = {
         "dir": "music",
         "volume": 0.9,
         "fade_out": 1.0,
-        # Which mood folder each category's music comes from, e.g. {"Fail?": "funny"}.
+        # Which mood folder each category's music comes from, e.g. {"Blooper/Fail": "funny"}.
         "mood_by_category": {},
     },
     "captions": {

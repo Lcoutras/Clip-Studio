@@ -16,8 +16,9 @@ from . import config, ffmpeg
 FAMILIES = [("GOAL", "GOAL"), ("SAVE", "SAVE"), ("SAVIOR", "SAVE"), ("DEMO", "DEMO"), ("ASSIST", "ASSIST"),
             ("PLAYMAKER", "ASSIST"), ("AERIAL", "AERIAL GOAL")]
 # The library section for each clip category (the category can be changed in Clip Studio).
-CATEGORY_KEYS = {"Goal": "GOAL", "Aerial": "AERIAL GOAL", "Save": "SAVE", "Demo": "DEMO", "Assist": "ASSIST",
-                 "Post": "POST", "Funny Moment": "FUNNY MOMENT", "Fail?": "FAIL?", "Manual": "ANY"}
+CATEGORY_KEYS = {"Goal": "GOAL", "Assist": "ASSIST", "Save": "SAVE", "Epic Save": "EPIC SAVE", "Clear": "CLEAR",
+                 "Center": "CENTER", "Aerial": "AERIAL HIT", "Demo": "DEMO", "Post": "POST",
+                 "Blooper/Fail": "FAIL?", "Fail?": "FAIL?", "Funny Moment": "FUNNY MOMENT", "Manual": "ANY"}
 
 SYSTEM_PROMPT = """You write the on-screen caption for short vertical Rocket League highlight clips \
 (TikTok / YouTube Shorts). The clip has no voice-over, so the caption carries the personality.

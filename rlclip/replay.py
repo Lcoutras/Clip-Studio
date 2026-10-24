@@ -359,12 +359,15 @@ def to_events(rep, offset, player_names, duration):
                 events.append(Event(t, label, 9 if aerial else 7, "hype", "replay",
                                     f"Your {label.lower()}" + (f", {stat.lower()} shot" if stat else ""), stat))
             elif my_team is not None and e.team != my_team:
-                events.append(Event(t, "FAIL?", 5, "funny", "replay",
-                                    f"{e.player} scored on your team", stat))
+                events.append(Event(t, "GOAL AGAINST", 5, "hype", "replay",
+                                    f"{e.player} scored against your team", stat))
             elif any(x.label == "ASSIST" and x.player.lower() in mine for x in near):
                 # A teammate's goal you set up is worth a clip of its own.
                 events.append(Event(t, "ASSIST", 6, "hype", "replay",
                                     f"Your assist to {e.player}" + (f", {stat.lower()} shot" if stat else ""), stat))
+            else:
+                events.append(Event(t, "TEAM GOAL", 5, "hype", "replay",
+                                    f"Your teammate {e.player} scored" + (f", {stat.lower()} shot" if stat else ""), stat))
             continue
         if e.label == "ASSIST":
             continue   # handled with the goal it led to

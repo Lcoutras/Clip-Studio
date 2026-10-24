@@ -6,7 +6,9 @@ const player = $("#player");
 
 const COLORS = {
   "Goal": "var(--c-goal)", "Aerial": "var(--c-aerial)", "Save": "var(--c-save)", "Demo": "var(--c-demo)",
-  "Assist": "var(--c-assist)", "Post": "var(--c-post)", "Funny Moment": "var(--c-funny)", "Fail?": "var(--c-fail)", "Manual": "var(--c-manual)",
+  "Assist": "var(--c-assist)", "Post": "var(--c-post)", "Funny Moment": "var(--c-funny)", "Fail?": "var(--c-fail)",
+  "Blooper/Fail": "var(--c-fail)", "Epic Save": "var(--c-epic)", "Clear": "var(--c-clear)", "Center": "var(--c-center)",
+  "Manual": "var(--c-manual)",
 };
 
 const state = {
@@ -55,7 +57,7 @@ async function refreshState() {
   Object.assign(state, { videos: data.videos, replays: data.replays || [], jobs: data.jobs, music: data.music,
                          categories: data.categories, format: data.format, version: data.version,
                          rejectReasons: data.reject_reasons || {}, categoryLabels: data.category_labels || {},
-                         noStamp: data.no_stamp || [] });
+                         noStamp: data.no_stamp || [], stampText: data.stamp_text || {} });
   renderRecordings();
   renderStatus();
   renderUpdate(data.update);
@@ -456,7 +458,7 @@ function renderPreview() {
   $("#preview").hidden = !on || !c;
   if (!c) return;
   $(".pv-caption").textContent = (c.caption || "").toUpperCase();
-  const stamp = (state.noStamp || []).includes(c.label) ? "" : `${c.label}!`;
+  const stamp = (state.noStamp || []).includes(c.label) ? "" : `${(state.stampText || {})[c.label] || c.label}!`;
   const showStamp = stamp && Math.abs(player.currentTime - c.anchor) < 1.5 && state.playerVideo === c.video;
   $(".pv-stamp").textContent = stamp + (c.stat ? `\n${c.stat}` : "");
   $(".pv-stamp").classList.toggle("on", Boolean(showStamp));

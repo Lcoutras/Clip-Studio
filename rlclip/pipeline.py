@@ -11,7 +11,7 @@ from pathlib import Path
 from . import captions, config, detect, feedback, ffmpeg, highlights, music, render, replay
 
 # Bump when detection changes enough that old results should be thrown away.
-DETECTION_VERSION = 8
+DETECTION_VERSION = 10
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
@@ -21,7 +21,8 @@ CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "t
 HASHTAGS = {
     "Goal": "#rocketleaguegoals", "Aerial": "#rocketleaguemechanics", "Save": "#rocketleaguesaves",
     "Demo": "#rocketleaguedemo", "Assist": "#rocketleague3v3", "Post": "#rocketleaguefunny",
-    "Funny Moment": "#rocketleaguefunny",
+    "Funny Moment": "#rocketleaguefunny", "Epic Save": "#rocketleaguesaves", "Clear": "#rocketleague3v3",
+    "Center": "#rocketleague3v3", "Blooper/Fail": "#rocketleaguefails",
     "Fail?": "#rocketleaguefails", "Manual": "#rocketleagueclips",
 }
 
@@ -208,7 +209,7 @@ class Project:
         ocr = detect.ocr_events(info, det, on_progress=on_progress, timeline=timeline)
         is_gameplay = detect.gameplay_checker(timeline)
         warnings = self.audio_warnings(track)
-        scoreboard_note = [] if is_gameplay.scoreboard_seen else [
+        scoreboard_note = [] if is_gameplay.scoreboard_seen or not det.get("reactions_alone") else [
             "The match scoreboard wasn't visible in this recording, so voice reactions on their own "
             "didn't become clips (a reaction right after a play still counts)."]
         # Reactions: your mic track when voices are recorded separately, otherwise loud moments

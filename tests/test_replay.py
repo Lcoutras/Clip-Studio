@@ -44,7 +44,7 @@ def test_events_become_your_plays():
     assert (150.0, "EPIC SAVE", "") in got
     assert not any(label == "SAVE" for _, label, _ in got)        # the epic save isn't counted twice
     assert (190.0, "ASSIST", "133 KM/H") in got
-    assert (220.0, "FAIL?", "90 KM/H") in got
+    assert (220.0, "GOAL AGAINST", "90 KM/H") in got   # every goal is a clip, whoever scored
     assert all(t != 250.0 for t, _, _ in got)
 
 

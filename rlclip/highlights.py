@@ -5,41 +5,53 @@ from dataclasses import asdict, dataclass, field
 from .detect import Event
 from .feedback import signal_of
 
-CATEGORIES = ["Goal", "Aerial", "Save", "Demo", "Assist", "Post", "Funny Moment", "Fail?", "Manual"]
-
-
+CATEGORIES = ["Goal", "Assist", "Save", "Epic Save", "Clear", "Center", "Aerial", "Demo", "Post",
+              "Blooper/Fail", "Funny Moment", "Manual"]
 # The type a clip gets when its category is changed by hand (it sets the stamp and captions).
-CATEGORY_LABELS = {"Goal": "GOAL", "Aerial": "AERIAL GOAL", "Save": "SAVE", "Demo": "DEMO", "Assist": "ASSIST",
-                   "Post": "POST", "Funny Moment": "FUNNY MOMENT", "Fail?": "FAIL?", "Manual": "HIGHLIGHT"}
+CATEGORY_LABELS = {"Goal": "GOAL", "Assist": "ASSIST", "Save": "SAVE", "Epic Save": "EPIC SAVE", "Clear": "CLEAR",
+                   "Center": "CENTER", "Aerial": "AERIAL HIT", "Demo": "DEMO", "Post": "POST",
+                   "Blooper/Fail": "BLOOPER", "Funny Moment": "FUNNY MOMENT", "Manual": "HIGHLIGHT"}
 # Types that don't get a big stamp on the video (their caption does the talking).
-NO_STAMP = ("HYPE", "HIGHLIGHT", "FUNNY MOMENT", "FAIL?")
+NO_STAMP = ("HYPE", "HIGHLIGHT", "FUNNY MOMENT", "FAIL?", "BLOOPER", "SHOT")
+# Stamp text when it differs from the type: anyone's goal is stamped "GOAL!".
+STAMP_TEXT = {"TEAM GOAL": "GOAL", "GOAL AGAINST": "GOAL", "OTHER GOAL": "GOAL"}
+# Smaller plays that happen many times a match: only the best few become clips.
+MINOR = ("CLEAR", "CENTER", "AERIAL HIT", "BICYCLE HIT")
+
+
+def stamp_text(label):
+    return "" if label in NO_STAMP else f"{STAMP_TEXT.get(label, label)}!"
 
 
 def label_for(category, label):
-    """Keep a more specific type that already fits the category (EPIC SAVE stays EPIC SAVE)."""
+    """Keep a more specific type that already fits the category (an AERIAL GOAL stays one)."""
     return label if category_of(label) == category else CATEGORY_LABELS.get(category, label)
 
 
 def category_of(label):
-    if label == "AERIAL GOAL":
+    if label in ("FAIL?", "BLOOPER"):
+        return "Blooper/Fail"
+    if label in ("AERIAL HIT", "BICYCLE HIT"):
         return "Aerial"
-    if label == "FAIL?":
-        return "Fail?"
+    if label == "EPIC SAVE":
+        return "Epic Save"
+    if label in ("SAVE", "SAVIOR"):
+        return "Save"
+    if label == "CLEAR":
+        return "Clear"
+    if label == "CENTER":
+        return "Center"
     if label == "POST":
         return "Post"
     if label == "FUNNY MOMENT":
         return "Funny Moment"
-    if label == "AERIAL HIT":
-        return "Aerial"
-    if label in ("HIGHLIGHT", "MANUAL"):
+    if label in ("HIGHLIGHT", "MANUAL", "HYPE", "SHOT"):
         return "Manual"
-    if "SAVE" in label or label == "SAVIOR":
-        return "Save"
     if label in ("DEMO", "EXTERMINATION"):
         return "Demo"
     if label in ("ASSIST", "PLAYMAKER"):
         return "Assist"
-    return "Goal"
+    return "Goal"   # every kind of goal, by anyone
 
 
 @dataclass
@@ -81,8 +93,8 @@ def _reason(group, reactions_db, mixed_audio=False):
         if e.source == "replay":
             if not big or e.weight >= 4:
                 parts.append(e.detail)
-        elif e.source == "ocr" and e.label == "FAIL?":
-            parts.append("someone else scored (could be a goal against you)")
+        elif e.source == "ocr" and e.label == "OTHER GOAL":
+            parts.append("another player scored")
         elif e.source == "ocr":
             parts.append(f"your {e.label} popup")
         elif e.source == "marker":
@@ -118,7 +130,7 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
     report.setdefault("vetoed", 0)
     is_gameplay = is_gameplay or (lambda t: True)
     reactions = list(reactions or [])
-    ocr_events = [e for e in ocr_events if e.label != "FAIL?" or is_gameplay(e.time)]
+    ocr_events = [e for e in ocr_events if e.label != "OTHER GOAL" or is_gameplay(e.time)]
     events = []
     for e in ocr_events:
         e.time, jump_db = _refine_with_audio(e, peaks)
@@ -140,7 +152,7 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
             standalone.append((t, db))
     # A reaction on its own only counts during a match (not in menus, loading screens or intros).
     # Reactions right after a play were kept above even if the goal replay hid the scoreboard.
-    standalone = [(t, db) for t, db in standalone if is_gameplay(t)]
+    standalone = [(t, db) for t, db in standalone if is_gameplay(t)] if det.get("reactions_alone") else []
     # ...and only when something happened in the game just before it (a hit, explosion or demo
     # in the game audio). Laughing at a Discord joke or talking over a quiet moment isn't a clip.
     if not mixed_audio and det.get("reaction_needs_game_sound", True):
@@ -204,9 +216,12 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
             getattr(best, "stat", ""), signal, group))
 
     picked = []
+    minor_cap = max(1, round(duration / 600 * det.get("max_minor_per_10min", 3)))
     for h in sorted(highlights, key=lambda h: h.score, reverse=True):
         if h.score < det["min_score"] or len(picked) >= det["max_clips_per_video"]:
             continue
+        if h.label in MINOR and sum(p.label in MINOR for p in picked) >= minor_cap:
+            continue  # enough clears, centers and aerial touches already
         if any(h.start < p.end and p.start < h.end for p in picked):
             continue  # overlaps a better clip
         if veto and h.signal and not h.signal.startswith("replay:") and veto(h):

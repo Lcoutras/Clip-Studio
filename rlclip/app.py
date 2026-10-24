@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, captions, config, feedback, ffmpeg, highlights, music, pipeline, replay, updater
+from . import __version__, captions, config, detect, feedback, ffmpeg, highlights, music, pipeline, replay, updater
 
 WEB = Path(__file__).resolve().parent / "web"
 
@@ -351,11 +351,46 @@ class Studio:
         """Write the feedback report next to the clips and show it in Explorer."""
         with self.feedback_lock:
             text = feedback.Feedback(pipeline.feedback_path(self.cfg)).report()
+        text += self.game_audio_report()
         out = self.out_root / "feedback_report.txt"
         out.write_text(text, encoding="utf-8")
         if os.name == "nt":
             subprocess.Popen(["explorer", "/select,", str(out)])  # noqa: S603,S607 - the user's own file
         return {"path": str(out), "text": text}
+
+    def game_audio_report(self, limit=80):
+        """Game-audio measurements at your clips (kept, rejected and added by hand), so detection of
+        post hits and close calls can be tuned on real examples. Your voice track isn't used."""
+        lines = ["", "Game audio at your clips (hit = loudest sound vs. just before, swell = crowd after vs. before, dB):"]
+        n = 0
+        for video in self.library():
+            proj = pipeline.Project(video, self.cfg)
+            if not proj.csv_path.exists():
+                continue
+            try:
+                info = proj.info
+            except ffmpeg.FFmpegError:
+                continue
+            if not info.audio_tracks:
+                continue
+            track = self.cfg["audio"]["game_track"] if info.audio_tracks > 1 else 0
+            for r in proj.read_rows():
+                state = ("rejected: " + (feedback.REASONS.get(r.get("reject_reason"), "no reason"))
+                         if pipeline.is_skipped(r) else "kept")
+                if r.get("source") == "manual":
+                    state += ", added by you"
+                try:
+                    f = detect.game_audio_features(video, track, float(r["anchor"]))
+                except Exception:   # unreadable audio shouldn't stop the report
+                    f = None
+                if not f:
+                    continue
+                lines.append(f"  {video.name} @ {float(r['anchor']):.0f}s  {r.get('category')}/{r.get('label')}  "
+                             f"[{state}]  hit {f['hit_db']:+.1f}  swell {f['swell_db']:+.1f}  level {f['level_db']:.1f}")
+                n += 1
+                if n >= limit:
+                    return "\n".join(lines + ["  (first %d clips only)" % limit]) + "\n"
+        return "\n".join(lines if n else lines + ["  (no analyzed clips yet)"]) + "\n"
 
     def formats(self):
         fmt = self.cfg["render"]["format"]
@@ -385,7 +420,7 @@ class Studio:
                 "hidden_categories": self.cfg["detection"].get("hidden_categories", []),
                 "format": self.formats()[0], "version": __version__, "update": self.update,
                 "reject_reasons": feedback.REASONS, "category_labels": highlights.CATEGORY_LABELS,
-                "no_stamp": list(highlights.NO_STAMP)}
+                "no_stamp": list(highlights.NO_STAMP), "stamp_text": highlights.STAMP_TEXT}
 
     def recording_label(self, path):
         """'Oct 23, 12:41 AM' from the recording's start time, or its file name."""
@@ -414,7 +449,8 @@ class Studio:
                     **row, "video": video.name, "rec_label": label, "rec_start": started,
                     "clip": int(row["clip"]), "start": float(row["start"]), "end": float(row["end"]),
                     "anchor": float(row["anchor"]), "skip": pipeline.is_skipped(row),
-                    "category": row.get("category") or highlights.category_of(row["label"]),
+                    "category": {"Fail?": "Blooper/Fail"}.get(row.get("category"), row.get("category"))
+                    or highlights.category_of(row["label"]),
                     "game_volume": float(row.get("game_volume") or 100),
                     "music_volume": float(row.get("music_volume") or 100),
                     "framing": row.get("framing") or self.cfg["render"]["vertical_style"],

@@ -84,6 +84,7 @@ def test_library_and_ai_caption(tmp_path, monkeypatch):
 
 def test_reactions_extend_plays_and_make_funny_moments():
     det = config.load()["detection"]
+    det["reactions_alone"] = True   # the option this test is about
     ocr = [detect.Event(100.0, "GOAL", 7, "hype", "ocr", "GOAL +100")]
     reactions = [(103.0, 20.0), (300.0, 22.0)]   # one right after the goal, one on its own
     found = highlights.build(ocr, [(100.0, 25.0), (298.0, 15.0)], [], det, 600, reactions)
@@ -96,20 +97,22 @@ def test_reactions_extend_plays_and_make_funny_moments():
 def test_other_players_goal_is_a_possible_fail():
     assert detect.other_scorer("e! e! 2000800 AYYR0N7321SC0RED! GOAL!".split(" "), ["postmates85"])
     assert not detect.other_scorer("[ALM] AERIALGOAL +20 POSTMATES85SC0RED!".split(" "), ["postmates85"])
-    assert highlights.category_of("FAIL?") == "Fail?"
+    assert highlights.category_of("FAIL?") == "Blooper/Fail"
+    assert highlights.category_of("OTHER GOAL") == "Goal"      # every goal is a Goal clip now
 
 
 def test_reactions_in_menus_are_ignored():
     """Talking in the main menu once became a 'Funny Moment' clip of the menu."""
     det = config.load()["detection"]
+    det["reactions_alone"] = True   # the option this test is about
     menu = [(t, 3.0, False) for t in range(0, 60)]        # menu: no match scoreboard
     match = [(t, 30.0, True) for t in range(60, 120)]      # match: scoreboard on screen
     is_gameplay = detect.gameplay_checker(menu + match)
     reactions = [(30.0, 25.0), (90.0, 25.0)]
-    fails = [detect.Event(40.0, "FAIL?", 5, "funny", "ocr"), detect.Event(100.0, "FAIL?", 5, "funny", "ocr")]
+    fails = [detect.Event(40.0, "OTHER GOAL", 5, "hype", "ocr"), detect.Event(100.0, "OTHER GOAL", 5, "hype", "ocr")]
     found = highlights.build(fails, [(28.0, 15.0), (88.0, 15.0)], [], det, 200, reactions, is_gameplay=is_gameplay)
     assert all(h.anchor >= 60 for h in found)
-    assert {h.category for h in found} == {"Funny Moment", "Fail?"}
+    assert {h.category for h in found} == {"Funny Moment", "Goal"}
 
 
 def test_no_scoreboard_means_no_reaction_clips():
@@ -194,15 +197,18 @@ def test_captions_follow_the_category(tmp_path):
 
 
 def test_changing_category_changes_the_stamp_type():
-    assert highlights.label_for("Fail?", "FUNNY MOMENT") == "FAIL?"
+    assert highlights.label_for("Blooper/Fail", "FUNNY MOMENT") == "BLOOPER"
     assert highlights.label_for("Post", "GOAL") == "POST"
-    assert highlights.label_for("Save", "EPIC SAVE") == "EPIC SAVE"     # a more specific type that fits stays
-    assert highlights.label_for("Aerial", "AERIAL GOAL") == "AERIAL GOAL"
+    assert highlights.label_for("Save", "SAVIOR") == "SAVIOR"           # a more specific type that fits stays
+    assert highlights.label_for("Goal", "AERIAL GOAL") == "AERIAL GOAL"
+    assert highlights.label_for("Epic Save", "SAVE") == "EPIC SAVE"
+    assert highlights.stamp_text("GOAL AGAINST") == "GOAL!" and highlights.stamp_text("BLOOPER") == ""
 
 
 def test_reactions_need_something_in_the_game_and_are_capped():
     """52 'Big reaction on the mic' clips in one 20-minute session: chatting isn't a play."""
     det = config.load()["detection"]
+    det["reactions_alone"] = True   # the option this test is about
     talk = [(t, 20.0 + (t % 7)) for t in range(30, 1200, 23)]          # loud mic all session
     game = [(t - 1.5, 15.0) for t, _ in talk[::2]]                      # the game did something before half
     found = highlights.build([], game, [], det, 1200, talk)
@@ -215,3 +221,23 @@ def test_goal_replay_frames_are_not_new_plays():
     replay = "SCORED BY [TTV] postmates85 PASSENGER PRINCESS 0:36 68 MPH GOAL PRESS TO TOGGLE VIEW PRESS TO SKIP"
     assert detect.classify_frame(replay.split(" "), ["postmates85"]) == []
     assert not detect.other_scorer("SCORED BY AYYR0N7321 GOAL PRESS TOSKIP".split(" "), ["postmates85"])
+
+
+def test_game_first_voice_alone_is_never_a_clip():
+    """Every clip Luke rejected was a mic reaction on its own: by default only the game makes clips."""
+    det = config.load()["detection"]
+    goal = [detect.Event(100.0, "GOAL", 7, "hype", "ocr", "GOAL +100")]
+    talk = [(103.0, 30.0), (300.0, 40.0), (500.0, 35.0)]
+    found = highlights.build(goal, [(100.0, 25.0), (299.0, 20.0), (499.0, 20.0)], [], det, 600, talk)
+    assert [h.label for h in found] == ["GOAL"]
+    assert found[0].end >= 103.0   # the celebration still extends the goal clip
+
+
+def test_clears_and_centers_need_a_big_hit_and_are_capped():
+    det = config.load()["detection"]
+    clears = [detect.Event(float(t), "CLEAR", *detect.EVENTS["CLEAR BALL"][1:], "ocr") for t in range(50, 600, 40)]
+    assert highlights.build(clears, [], [], det, 600) == []                    # no big hit in the game audio
+    hits = [(e.time - 0.3, 14.0) for e in clears]                              # every one was a loud hit
+    found = highlights.build(clears, hits, [], det, 600)
+    assert 0 < len(found) <= round(600 / 600 * det["max_minor_per_10min"])
+    assert {h.category for h in found} == {"Clear"}
