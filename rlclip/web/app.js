@@ -58,6 +58,7 @@ async function refreshState() {
   renderRecordings();
   renderStatus();
   renderUpdate(data.update);
+  syncExternalEdits();
   for (const job of data.jobs) {
     const before = jobStatus.get(job.id);
     jobStatus.set(job.id, job.status);
@@ -285,6 +286,18 @@ function loadPlayer(video, t) {
     player.src = state.sources[video] || `/source/${encodeURIComponent(video)}`;
   }
   seekTo(t);
+}
+
+// Clips can change outside this window: the Clip Agent edits captions, music and verdicts.
+// Reload when a recording's clip sheet changes, unless the change was our own save.
+let lastSave = 0;
+function syncExternalEdits() {
+  const inView = state.videos.filter(v => state.current === ALL || v.name === state.current);
+  const revs = Object.fromEntries(inView.map(v => [v.name, v.rev]));
+  const changed = state.revs && Object.entries(revs).some(([k, r]) => r && state.revs[k] !== undefined && state.revs[k] !== r);
+  if (changed && (pending.size || typing())) return;   // check again once our own edit is saved
+  if (changed && Date.now() - lastSave > 2500) loadClips();   // a save of ours just landed: that's not news
+  state.revs = revs;
 }
 
 async function softRefresh() {
@@ -515,6 +528,7 @@ const flush = debounce(async () => {
   const batch = [...pending.values()];
   pending.clear();
   for (const { clip, fields } of batch) {
+    lastSave = Date.now();
     try { await api("/api/clip", { video: clip.video, clip: clip.clip, fields }); }
     catch (e) { report(e); }
   }

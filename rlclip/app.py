@@ -372,7 +372,9 @@ class Studio:
             videos.append({"name": path.name, "path": str(path), "scanned": scanned,
                            "label": self.recording_label(path),
                            "clips": len(rows), "kept": sum(1 for r in rows if not pipeline.is_skipped(r)),
-                           "flagged": sum(1 for r in rows if r.get("flag"))})
+                           "flagged": sum(1 for r in rows if r.get("flag")),
+                           # Changes when anything edits the clips (e.g. the Clip Agent), so the UI reloads.
+                           "rev": proj.csv_path.stat().st_mtime if scanned else 0})
         lib = music.MusicLibrary(self.cfg)
         infos = self.settings.get("replay_info", {})
         replays = [{"path": p, "file": Path(p).name, **infos.get(p, {})}
