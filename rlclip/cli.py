@@ -25,7 +25,7 @@ def cmd_run(args, cfg, render_too=True):
         rows = project.write_captions(found, recaption=args.recaption or args.rescan)
         if render_too:
             made = project.render_all(rows, _formats(cfg, args.format))
-            print(f"  done: {len(made)} edits in {project.out_dir}")
+            print(f"  done: {len(made)} edits in {pipeline.exports_dir(cfg)}")
         else:
             print(f"  captions ready to edit: {project.csv_path}")
     return 0
@@ -39,7 +39,7 @@ def cmd_render(args, cfg):
             continue
         print(f"\n=== {video.name}")
         made = project.render_all(project.read_rows(), _formats(cfg, args.format))
-        print(f"  done: {len(made)} edits in {project.out_dir}")
+        print(f"  done: {len(made)} edits in {pipeline.exports_dir(cfg)}")
     return 0
 
 

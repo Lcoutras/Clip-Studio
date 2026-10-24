@@ -4,6 +4,7 @@ It listens on 127.0.0.1 only, so nothing is reachable from other computers. Anal
 exports run one at a time on a background thread; the UI polls /api/state for progress.
 """
 
+import datetime
 import json
 import mimetypes
 import os
@@ -46,6 +47,13 @@ class Studio:
         except (OSError, ValueError):
             self.settings = {}
         self.settings.setdefault("library", [])
+        old = self.out_root / "highlights"   # before 0.24: highlight videos of all recordings
+        for mp4 in old.glob("*.mp4") if old.is_dir() else []:
+            day = pipeline.exports_dir(cfg, datetime.date.fromtimestamp(mp4.stat().st_mtime).isoformat())
+            day.mkdir(parents=True, exist_ok=True)
+            mp4.replace(day / mp4.name)
+        if old.is_dir() and not any(old.iterdir()):
+            old.rmdir()
         self.jobs = []
         self.lock = threading.Lock()
         self.feedback_lock = threading.Lock()
@@ -300,8 +308,7 @@ class Studio:
             rows = [r for r in proj.read_rows() if int(r["clip"]) in clips and not pipeline.is_skipped(r)]
             layout = self.formats()[0]
             _check(job)
-            missing = [r for r in rows
-                       if not (proj.out_dir / layout / f"{proj.output_name(r)}.mp4").exists()]
+            missing = [r for r in rows if not proj.exported(r, layout)]
             if missing:
                 job["message"] = f"Exporting {len(missing)} clips first..."
                 def on_clip(r):
@@ -424,7 +431,6 @@ class Studio:
 
     def recording_label(self, path):
         """'Oct 23, 12:41 AM' from the recording's start time, or its file name."""
-        import datetime
         start = replay.recording_start(path)
         if start is None:
             return Path(path).stem
@@ -444,7 +450,7 @@ class Studio:
             started = replay.recording_start(video) or video.stat().st_mtime
             label = self.recording_label(video)
             for row in proj.read_rows():
-                rendered = proj.out_dir / layout / f"{proj.output_name(row)}.mp4"
+                rendered = proj.exported(row, layout)
                 result.append({
                     **row, "video": video.name, "rec_label": label, "rec_start": started,
                     "clip": int(row["clip"]), "start": float(row["start"]), "end": float(row["end"]),
@@ -458,7 +464,7 @@ class Studio:
                     "flag": bool(row.get("flag")), "note": row.get("note") or "",
                     "reject_reason": row.get("reject_reason") or "",
                     "rendered": self.media_url(rendered) + f"?v={int(rendered.stat().st_mtime)}"
-                    if rendered.exists() else None,
+                    if rendered else None,
                 })
         return {"clips": result, "sources": sources, "warnings": warnings, "notes": notes}
 
@@ -484,19 +490,23 @@ class Studio:
                 row = next((r for r in proj.read_rows() if int(r["clip"]) == int(clip)), None)
                 if row is None or pipeline.is_skipped(row):
                     continue
-                out = proj.out_dir / layout / f"{proj.output_name(row)}.mp4"
-                if not out.exists():
+                out = proj.exported(row, layout)
+                if not out:
                     job.update(progress=round(80 * i / max(1, len(items))),
                                message=f"Exporting clip {i + 1} of {len(items)} first...")
                     proj.render_all([row], self.formats())
+                    row = next(r for r in proj.read_rows() if int(r["clip"]) == int(clip))
+                    out = proj.exported(row, layout)
                 self.learn_kept(proj, [row])
-                parts.append(out)
+                if out:
+                    parts.append(out)
             _check(job)
             if not parts:
                 raise RuntimeError("No kept clips to join")
             job.update(progress=85, message=f"Joining {len(parts)} clips...")
             import time as _time
-            out = self.out_root / "highlights" / f"HIGHLIGHTS_{_time.strftime('%Y-%m-%d_%H-%M-%S')}_{layout}.mp4"
+            out = pipeline.exports_dir(self.cfg) / f"Highlights - {_time.strftime('%I.%M %p').lstrip('0')}" \
+                f"{' [' + layout + ']' if layout != 'vertical' else ''}.mp4"
             pipeline.join_clips(parts, out, self.cfg["render"]["fps"])
             job.update(message=f"Highlight video saved: {out.name}", result=self.media_url(out))
         return self.submit("compile", "all recordings", run)
@@ -545,8 +555,11 @@ class Studio:
         picker.save_state()
         return {"caption": line, "tone": tone, "label": label}
 
-    def open_folder(self, name):
-        folder = self.project(name).out_dir
+    def open_folder(self, name=None):
+        """Today's exports, or the Exports folder when nothing has been exported today."""
+        folder = pipeline.exports_dir(self.cfg)
+        if not folder.exists():
+            folder = folder.parent
         folder.mkdir(parents=True, exist_ok=True)
         if os.name == "nt":
             os.startfile(folder)  # noqa: S606 - opens Explorer on the user's own output folder

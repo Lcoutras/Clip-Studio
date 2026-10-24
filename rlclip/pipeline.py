@@ -2,6 +2,7 @@
 
 import copy
 import csv
+import datetime
 import json
 import os
 import re
@@ -15,7 +16,29 @@ DETECTION_VERSION = 10
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
-              "framing", "crop_x", "stat", "flag", "note", "reject_reason", "agent", "agent_note"]
+              "framing", "crop_x", "stat", "flag", "note", "reject_reason", "agent", "agent_note", "exports"]
+
+# Finished clips go to output/Exports/<date of export>/; Clip Studio's own working files (analysis,
+# captions sheet, raw cuts) go to output/Analysis/<recording>/.
+EXPORTS = "Exports"
+ANALYSIS = "Analysis"
+
+
+def exports_dir(cfg, day=None):
+    return config.resolve(cfg["output_dir"]) / EXPORTS / (day or datetime.date.today().isoformat())
+
+
+def _safe(text):
+    """Text that's allowed in a Windows file name."""
+    return re.sub(r"\s+", " ", re.sub(r'[<>:"/\\|?*\x00-\x1f]+', " ", text or "")).strip(" .")
+
+
+def recording_time(video):
+    """'Oct 22 6.25 PM' from when the recording started (file names can't contain ':')."""
+    start = replay.recording_start(video)
+    if start is None:
+        return _safe(Path(video).stem)
+    return datetime.datetime.fromtimestamp(start).strftime("%b %d %I.%M %p").replace(" 0", " ")
 
 
 HASHTAGS = {
@@ -86,10 +109,48 @@ class Project:
     def __init__(self, video, cfg):
         self.video = Path(video)
         self.cfg = cfg
-        self.out_dir = config.resolve(cfg["output_dir"]) / self.video.stem
+        self.out_root = config.resolve(cfg["output_dir"])
+        self.out_dir = self.out_root / ANALYSIS / self.video.stem
         self.highlights_path = self.out_dir / "highlights.json"
         self.csv_path = self.out_dir / "captions.csv"
         self._info = None
+        self._migrate_old_layout()
+
+    def _migrate_old_layout(self):
+        """Before 0.24 everything lived in output/<recording>/, with exports in vertical/ and
+        horizontal/ next to the working files. Move exports into dated folders and the rest
+        into Analysis/."""
+        old = self.out_root / self.video.stem
+        if self.out_dir.exists() or not ((old / "captions.csv").exists() or (old / "highlights.json").exists()):
+            return
+        try:
+            moved = {}
+            for layout in ("vertical", "horizontal"):
+                for mp4 in sorted((old / layout).glob("*.mp4")):
+                    day = datetime.date.fromtimestamp(mp4.stat().st_mtime).isoformat()
+                    dest = exports_dir(self.cfg, day) / mp4.name
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(mp4), str(dest))
+                    if mp4.with_suffix(".txt").exists():
+                        shutil.move(str(mp4.with_suffix(".txt")), str(dest.with_suffix(".txt")))
+                    m = re.match(re.escape(self.video.stem) + r"_(\d+)_", mp4.name)
+                    if m:
+                        moved.setdefault(int(m.group(1)), []).append(f"{layout}={dest.relative_to(self.out_root).as_posix()}")
+                shutil.rmtree(old / layout, ignore_errors=True)
+            for mp4 in old.glob("*_HIGHLIGHTS_*.mp4"):
+                day = datetime.date.fromtimestamp(mp4.stat().st_mtime).isoformat()
+                exports_dir(self.cfg, day).mkdir(parents=True, exist_ok=True)
+                shutil.move(str(mp4), str(exports_dir(self.cfg, day) / mp4.name))
+            self.out_dir.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(old), str(self.out_dir))
+            if moved and self.csv_path.exists():
+                rows = self.read_rows()
+                for r in rows:
+                    if int(r["clip"]) in moved:
+                        r["exports"] = ";".join(moved[int(r["clip"])])
+                self.write_rows(rows)
+        except OSError as e:   # a file in use: leave things where they are and try again next time
+            print(f"  ! couldn't reorganize {old}: {e}")
 
     @property
     def info(self):
@@ -267,7 +328,7 @@ class Project:
         data = [h.to_dict() for h in found]
         # Old clips and captions belong to the old detection; clear them only now, so a cancelled
         # or failed analysis leaves the previous results alone.
-        for old in ("vertical", "horizontal", "raw", "work", "previews"):
+        for old in ("raw", "work", "previews"):   # exported clips (in Exports/) are kept
             shutil.rmtree(self.out_dir / old, ignore_errors=True)
         self._carry_flags = self.flagged()
         self.csv_path.unlink(missing_ok=True)
@@ -373,18 +434,36 @@ class Project:
     def compile(self, clips, layout, on_progress=None):
         """Join already-exported clips (in the given order) into one highlight video."""
         rows = {int(r["clip"]): r for r in self.read_rows()}
-        parts = [self.out_dir / layout / f"{self.output_name(rows[c])}.mp4" for c in clips if c in rows]
-        parts = [p for p in parts if p.exists()]
+        parts = [self.exported(rows[c], layout) for c in clips if c in rows]
+        parts = [p for p in parts if p]
         if not parts:
             raise RuntimeError("Export the clips first, then build the highlight video from them")
-        out = self.out_dir / f"{self.video.stem}_HIGHLIGHTS_{layout}.mp4"
+        out = exports_dir(self.cfg) / f"Highlights - {recording_time(self.video)}" \
+            f"{' [' + layout + ']' if layout != 'vertical' else ''}.mp4"
         if on_progress:
             on_progress(f"Joining {len(parts)} clips...")
         return join_clips(parts, out, self.cfg["render"]["fps"])
 
     # ------------------------------------------------------------ step 3
     def output_name(self, row):
+        """Name for working files (raw cuts)."""
         return f"{self.video.stem}_{int(row['clip']):02d}_{_slug(row['label'])}"
+
+    def export_name(self, row, layout, formats):
+        """'Goal - Called it from kickoff (Oct 22 6.25 PM #3)': what it is, its caption, where it's from."""
+        category = _safe((row.get("category") or "Clip").replace("/", "-").replace("?", ""))
+        caption = _safe(row.get("caption") or "")[:45].strip(" .")
+        name = f"{category} - {caption}" if caption else category
+        name += f" ({recording_time(self.video)} #{int(row['clip'])})"
+        return name + (f" [{layout}]" if len(formats) > 1 else "")
+
+    def exported(self, row, layout):
+        """The clip's latest export in this layout, if it's still there."""
+        for item in (row.get("exports") or "").split(";"):
+            kind, _, rel = item.partition("=")
+            if kind == layout and rel and (self.out_root / rel).exists():
+                return self.out_root / rel
+        return None
 
     def clip_config(self, row):
         """Settings for one clip: the global config plus that clip's volume/framing tweaks."""
@@ -407,7 +486,7 @@ class Project:
             print(f"  ! No music found in {library.root} - clips will only have game audio.")
         mood_of = {h["index"]: h["mood"] for h in self.load_highlights() or []}
 
-        made = []
+        made, exports = [], {}
         for row in rows:
             if is_skipped(row):
                 continue
@@ -438,11 +517,28 @@ class Project:
 
             if cfg["render"]["keep_raw_clip"]:
                 render.save_raw(video, game, self.out_dir / "raw" / f"{name}.mp4")
+            today = exports_dir(cfg)
+            entries = []
             for layout in formats:
-                out = self.out_dir / layout / f"{name}.mp4"
+                out = today / f"{self.export_name(row, layout, formats)}.mp4"
+                previous = self.exported(row, layout)
                 render.render(cfg, video, game, anchor - start, layout, row["caption"], row["label"],
                               song, out, work, stat=row.get("stat") or "")
                 out.with_suffix(".txt").write_text(post_text(row), encoding="utf-8")
+                if previous and previous != out and previous.parent == today:
+                    # Re-exported today with a new caption: replace today's older copy.
+                    previous.unlink(missing_ok=True)
+                    previous.with_suffix(".txt").unlink(missing_ok=True)
+                entries.append(f"{layout}={out.relative_to(self.out_root).as_posix()}")
                 made.append(out)
+            exports[idx] = entries
         shutil.rmtree(self.out_dir / "work", ignore_errors=True)
+        if exports and self.csv_path.exists():
+            saved = self.read_rows()
+            for r in saved:
+                if int(r["clip"]) in exports:
+                    keep = [e for e in (r.get("exports") or "").split(";")
+                            if e and e.split("=")[0] not in formats]
+                    r["exports"] = ";".join(keep + exports[int(r["clip"])])
+            self.write_rows(saved)
         return made

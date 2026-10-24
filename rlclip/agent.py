@@ -401,8 +401,8 @@ def cmd_review(cfg, args):
     _update_row(proj, args.clip, **fields)
     log_decision(cfg, proj, row, fields)
     print(f"clip {args.clip}: " + ", ".join(f"{k}={v!r}" for k, v in fields.items() if k != "alt_caption"))
-    rendered = proj.out_dir / "vertical" / f"{proj.output_name(row)}.mp4"
-    if rendered.exists() and set(fields) & {"caption", "music", "start", "end"}:
+    rendered = proj.exported(row, "vertical")
+    if rendered and set(fields) & {"caption", "music", "start", "end"}:
         print("  (it was already exported: re-export it in Clip Studio to apply the changes)")
     return 0
 

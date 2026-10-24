@@ -66,7 +66,7 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 
 Keyboard: **Space** play/pause, **↑/↓** previous/next clip, **P** play clip, **I/O** set start/end, **Delete** reject/keep, **F** flag.
 
-Exports go to `output\<recording name>\vertical\`. Highlight videos go to `output\<recording name>\`, or `output\highlights\` when built from All recordings. The **Open output folder** link takes you there.
+Exports go to **`output\Exports\<today's date>\`**, e.g. `output\Exports\2026-10-24\Goal - Called it from kickoff (Oct 22 6.25 PM #3).mp4`. Each name says what the play is, its caption, and which recording it came from. Every clip has a `.txt` next to it with the title and hashtags to paste. Highlight videos go in the same day's folder. The **Open output folder** link opens today's folder. Clip Studio's own working files (analysis, the captions sheet, raw cuts) are kept separately in `output\Analysis\`, and re-analyzing a recording never deletes your exports.
 
 MKV recordings can be analyzed and exported, but they can't be previewed in the player. Use OBS **File → Remux Recordings** to make an MP4.
 
@@ -94,19 +94,13 @@ Clip Studio reads replays with [rrrocket](https://github.com/nickbabcock/rrrocke
 
 ## 4. Make clips without the app
 
-Drag a recording, or a whole folder of them, onto **`clip.bat`**. Results go to `output\<video name>\`:
-
-```
-vertical\    finished edits to post
-raw\         the unedited play, voices removed
-captions.csv the caption/music sheet (see below)
-```
+Drag a recording, or a whole folder of them, onto **`clip.bat`**. Finished edits go to `output\Exports\<today's date>\`. The caption/music sheet (`captions.csv`, see below) and the unedited cuts (`raw\`) are in `output\Analysis\<video name>\`.
 
 A 1-hour recording takes roughly 10–20 minutes to scan on a typical PC, then about 30 seconds per clip to render. Set `encoder: h264_nvenc` under `render:` in `settings.yaml` on an NVIDIA GPU for much faster renders.
 
 ### Change captions, music or timing
 
-Open `output\<video>\captions.csv` in Excel. Per clip you can:
+Open `output\Analysis\<video>\captions.csv` in Excel. Per clip you can:
 - rewrite `caption` (or paste in `alt_caption`, a second option)
 - set `music` to a file name from your music folder
 - adjust `start` / `end` (seconds into the recording)
