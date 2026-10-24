@@ -186,3 +186,12 @@ def test_music_add_from_file_and_credit(tmp_path, monkeypatch):
                                             "attribution": "Music: Fluffing a Duck by Kevin MacLeod (incompetech.com) CC BY 4.0"})())
     assert [t.name for t in lib.tracks("funny")] == ["Fluffing a Duck.mp3"]
     assert lib.credit("Fluffing a Duck.mp3").startswith("Music: Fluffing a Duck")
+
+
+def test_motion_ranks_clips(tmp_path, monkeypatch):
+    cfg, proj = _setup(tmp_path, monkeypatch, _rows(4))
+    fake = {34.0: [1, 1], 64.0: [9, 12], 94.0: [3, 4], 124.0: []}
+    monkeypatch.setattr(agent, "_motion_curve", lambda video, s, e: fake[round(s + 2.5, 1)])
+    m = agent.motion_scores(proj)
+    assert [m[c]["rank"] for c in (1, 2, 3, 4)] == [3, 1, 2, 4]
+    assert m[2]["peak"] == 12 and (proj.out_dir / "motion.json").exists()

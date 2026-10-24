@@ -229,6 +229,93 @@ def cmd_sheet(cfg, args):
     return 0
 
 
+# ------------------------------------------------------------ motion: what still frames can't show
+def _motion_curve(video, start, end, fps=6, size=(64, 36)):
+    """How much the picture changes, frame to frame (0-255 scale), sampled across a window."""
+    import numpy as np
+    w, h = size
+    proc = ffmpeg.pipe(["-ss", f"{max(0.0, start):.2f}", "-t", f"{max(0.5, end - start):.2f}", "-i", str(video),
+                        "-an", "-vf", f"fps={fps},scale={w}:{h},format=gray", "-f", "rawvideo", "-"])
+    raw = proc.stdout.read()
+    proc.wait()
+    frames = np.frombuffer(raw[: len(raw) // (w * h) * (w * h)], np.uint8).reshape(-1, h, w).astype(np.int16)
+    if len(frames) < 2:
+        return []
+    return [float(x) for x in np.abs(np.diff(frames, axis=0)).mean(axis=(1, 2))]
+
+
+def motion_scores(proj):
+    """{clip: {"build_up": .., "peak": .., "rank": ..}}: motion in the 2.5 s before each play,
+    ranked against the recording's other clips. Cached next to the clips."""
+    cache_path = proj.out_dir / "motion.json"
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    rows = proj.read_rows()
+    for r in rows:
+        key = f"{r['clip']}|{float(r['anchor']):.2f}"
+        if key not in cache:
+            a = float(r["anchor"])
+            curve = _motion_curve(proj.video, a - 2.5, a + 0.5)
+            cache[key] = {"build_up": round(sum(curve) / len(curve), 2) if curve else 0.0,
+                          "peak": round(max(curve), 2) if curve else 0.0}
+    cache_path.write_text(json.dumps(cache, indent=1), encoding="utf-8")
+    out = {}
+    scored = [(int(r["clip"]), cache[f"{r['clip']}|{float(r['anchor']):.2f}"]) for r in rows]
+    order = sorted(scored, key=lambda x: -x[1]["build_up"])
+    for rank, (clip, m) in enumerate(order, 1):
+        out[clip] = {**m, "rank": rank, "of": len(order)}
+    return out
+
+
+def cmd_motion(cfg, args):
+    """A close-up strip of the play (9 frames, 0.3 s apart) plus motion numbers, for judging
+    what stills can't show: speed, air time, a flashy touch versus a slow push."""
+    from PIL import Image, ImageDraw
+
+    video = find_video(cfg, args.recording)
+    proj = pipeline.Project(video, cfg)
+    row = _row(proj, args.clip)
+    a = float(row["anchor"])
+    times = [round(a - 2.4 + 0.3 * i, 2) for i in range(9)]   # the build-up into the play
+    tw, th, cols = 480, 270, 3
+    sheet = Image.new("RGB", (cols * tw, 3 * (th + 22)), (20, 20, 24))
+    draw = ImageDraw.Draw(sheet)
+    work = agent_dir(cfg) / "sheets"
+    work.mkdir(parents=True, exist_ok=True)
+    for i, t in enumerate(times):
+        frame = work / "_frame.jpg"
+        ffmpeg.run(["-ss", f"{max(0.0, t):.2f}", "-i", video, "-frames:v", "1", "-vf", f"scale={tw}:{th}",
+                    "-q:v", "3", frame])
+        x, y = (i % cols) * tw, (i // cols) * (th + 22)
+        try:
+            sheet.paste(Image.open(frame).convert("RGB"), (x, y + 22))
+        except OSError:
+            continue
+        mark = i == len(times) - 1
+        draw.text((x + 6, y + 4), f"{t - a:+.1f}s" + ("  <- the play" if mark else ""),
+                  fill=(255, 220, 0) if mark else (200, 200, 200))
+    out = work / f"{video.stem}_clip{int(row['clip']):02d}_play.jpg"
+    sheet.save(out, quality=88)
+    (work / "_frame.jpg").unlink(missing_ok=True)
+    print(out)
+    m = motion_scores(proj).get(int(row["clip"]))
+    if m:
+        level = ("too few clips to compare" if m["of"] < 4 else "high" if m["rank"] <= m["of"] // 3
+                 else "low" if m["rank"] > m["of"] * 2 // 3 else "medium")
+        print(f"Motion in the 2.5 s before the play: {m['build_up']:.1f} average, {m['peak']:.1f} peak "
+              f"(#{m['rank']} of {m['of']} clips in this recording: {level}). Fast driving, aerials and a "
+              "spinning camera score high; a slow ground push scores low. Menus and replays can also move, "
+              "so check the strip.")
+    if row.get("stat"):
+        print(f"From the replay: {row['stat']} shot speed.")
+    elif not any(n.startswith("Used replay") for n in proj.notes()):
+        print("No replay data for this recording: shot speed and aerials are unknown. "
+              "(Saving the replay after each match fills these in.)")
+    return 0
+
+
 # ------------------------------------------------------------ review
 def _row(proj, clip):
     if not proj.csv_path.exists():
@@ -886,6 +973,9 @@ def add_parser(sub):
     s = a.add_parser("sheet", help="contact sheet of frames from a clip")
     s.add_argument("recording")
     s.add_argument("clip", type=int)
+    s = a.add_parser("motion", help="close-up strip of the play plus motion numbers (what stills can't show)")
+    s.add_argument("recording")
+    s.add_argument("clip", type=int)
     s = a.add_parser("todo", help="clips Luke analyzed that the agent hasn't reviewed")
     s.add_argument("--top", type=int, default=8, help="per recording, highest score first (0 = all)")
     s = a.add_parser("review", help="approve, reject or flag a clip, and fix its caption, music or timing")
@@ -934,7 +1024,7 @@ def add_parser(sub):
 
 COMMANDS = {"status": cmd_status, "scan": cmd_scan, "sheet": cmd_sheet, "review": cmd_review,
             "package": cmd_package, "queue": cmd_queue, "posted": cmd_posted, "feedback": cmd_feedback,
-            "todo": cmd_todo, "caption-add": cmd_caption_add, "music-list": cmd_music_list,
+            "todo": cmd_todo, "motion": cmd_motion, "caption-add": cmd_caption_add, "music-list": cmd_music_list,
             "music-add": cmd_music_add, "distill": cmd_distill, "apply-settings": cmd_apply_settings,
             "handoff": cmd_handoff}
 

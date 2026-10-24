@@ -17,12 +17,13 @@ description: First-line review of the clips Clip Studio suggested. Check each cl
 
 3. **For each clip:**
    1. Run `tool.py sheet "<recording>" <clip>` and **read the image**.
-   2. Decide on content, timing, statement and music, as described in CLAUDE.md.
-   3. Record everything in **one** `tool.py review` call. Include `--note` with your reasoning, plus any `--caption`, `--tone`, `--music` or `--start/--end` fixes. Examples:
+   2. If the sheet shows a real play but you can't tell how good it is (a ground push or a flashy shot, how fast, whether he was in the air), run `tool.py motion "<recording>" <clip>`. Read the strip and weigh the motion rank. Low motion with no replay speed usually means an ordinary play: approve it only if the caption or a reaction carries it. If you still can't tell, `--flag` it and ask Luke to rate it (`--note "flashy? can't tell from stills"`).
+   3. Decide on content, timing, statement and music, as described in CLAUDE.md.
+   4. Record everything in **one** `tool.py review` call. Include `--note` with your reasoning, plus any `--caption`, `--tone`, `--music` or `--start/--end` fixes. Examples:
       - `review "2026-10-22 19-22-34.mp4" 3 --approve --caption "Ceiling? Never met her" --music none --note "clean aerial; trending sound fits"`
       - `review "2026-10-22 19-22-34.mp4" 5 --reject not_gameplay --note "post-match lobby screen"`
       - `review "2026-10-22 19-22-34.mp4" 7 --flag --note "can't tell if he touched the ball; check 0:14"`
-   4. If you wrote a caption better than anything in the library, save it with `tool.py caption-add`.
+   5. If you wrote a caption better than anything in the library, save it with `tool.py caption-add`.
 
 4. **Music check.** Run `tool.py music-list`. If a mood folder has fewer than about 5 tracks, or every track has the same energy, use the find-music skill. Ask Luke first if more than a couple of downloads are needed.
 

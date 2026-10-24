@@ -32,6 +32,7 @@ Run from this folder with `../.venv/Scripts/python.exe tool.py <command>`:
 |---|---|
 | `todo [--top 8]` | Clips Luke analyzed that you haven't reviewed, highest score first, with caption, tone and music |
 | `sheet "<recording>" <clip>` | Contact sheet: 9 small frames across the clip, the play outlined in yellow. **Read the image.** |
+| `motion "<recording>" <clip>` | When stills can't tell you how good the play is: a close-up strip (9 sharper frames, 0.3 s apart, into the play) plus how much the screen moves before the play, ranked against the recording's other clips. Also shows replay shot speed when there is one. |
 | `review "<recording>" <clip> [--approve / --reject REASON / --flag] [--note "..."] [--caption "..."] [--tone funny/motivational] [--music <file>/auto/none] [--category ...] [--start S --end E]` | Your verdict and edits. REASON: not_gameplay, not_mine, boring, timing, duplicate, other. Always add a `--note` with your reasoning. |
 | `caption-add <LABEL> <tone> "line"` | Add a caption line to the library (`captions/my_captions.yaml`). LABEL is a library section: GOAL, AERIAL GOAL, EPIC SAVE, SAVE, ASSIST, DEMO, FUNNY MOMENT, FAIL?, ANY... |
 | `music-list` | Tracks with mood folder, length, where the drop is, license and energy |
