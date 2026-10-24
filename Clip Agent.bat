@@ -16,4 +16,4 @@ if not exist "..\.venv\Scripts\python.exe" (
   pause
   exit /b 1
 )
-"%CLAUDE%" "/process-recordings"
+"%CLAUDE%" "/review-clips"

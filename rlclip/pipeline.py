@@ -15,7 +15,7 @@ DETECTION_VERSION = 7
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
-              "framing", "crop_x", "stat", "flag", "note", "reject_reason"]
+              "framing", "crop_x", "stat", "flag", "note", "reject_reason", "agent", "agent_note"]
 
 
 HASHTAGS = {
@@ -236,6 +236,11 @@ class Project:
         learned_notes = []
         fb = feedback.Feedback(feedback_path(self.cfg))
         learned = fb.learned()
+        # Settings tuned from the Clip Agent's lessons apply on top of what your own feedback taught.
+        for signal, pts in (det.get("signal_adjust") or {}).items():
+            learned["penalty"][signal] = learned["penalty"].get(signal, 0) - float(pts)
+        for cat, (s, e) in (det.get("timing_adjust") or {}).items():
+            learned["timing"].setdefault(cat, (float(s), float(e)))
         veto = None
         if learned["screens"]:
             def veto(h):
@@ -302,7 +307,7 @@ class Project:
                    "start": h["start"], "end": h["end"], "anchor": h["anchor"], "music": "",
                    "skip": "yes" if hidden else "", "reason": h.get("reason", ""), "source": "auto",
                    "stat": h.get("stat", "")}
-            tone = picker.pick_tone()
+            tone = picker.pick_tone(category)
             library_line = picker.from_library(h["label"], tone)
             ai_line = None
             if picker.client:
@@ -349,7 +354,7 @@ class Project:
         det = self.cfg["detection"]
         rows = self.read_rows() if self.csv_path.exists() else []
         picker = captions.CaptionPicker(self.cfg, config.resolve(self.cfg["output_dir"]) / ".captions_used.json")
-        tone = picker.pick_tone()
+        tone = picker.pick_tone("Manual")
         at = min(max(0.0, float(at)), self.info.duration)
         row = {"clip": max([int(r["clip"]) for r in rows] + [0]) + 1, "label": label, "category": "Manual",
                "score": "", "start": f"{max(0.0, at - det['pre_seconds']):.2f}",
@@ -422,7 +427,8 @@ class Project:
                     print(f"    ! music '{row['music']}' not found, picking one")
             if track is None and not no_music:
                 # Funny captions get the goofy tracks; everything else follows the play type.
-                mood = "funny" if row.get("tone") == "funny" else mood_of.get(idx, "hype")
+                mood = (cfg["music"].get("mood_by_category") or {}).get(row.get("category")) or (
+                    "funny" if row.get("tone") == "funny" else mood_of.get(idx, "hype"))
                 track = library.choose(mood)
             song = (track, library.drop_time(track)) if track else None
             if track:

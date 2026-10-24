@@ -155,7 +155,8 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
         penalty = learned.get("penalty", {}).get(signal, 0)
         if penalty:
             score -= penalty
-            report["lowered"][signal] = report["lowered"].get(signal, 0) + 1
+            if penalty > 0:
+                report["lowered"][signal] = report["lowered"].get(signal, 0) + 1
         category = category_of(best.label)
         # Only the moments that matter set the window; a stray blip shouldn't add lead-in.
         span = [e for e in group if e.weight >= best.weight * 0.5]

@@ -17,3 +17,5 @@ settings.yaml
 config.old.yaml
 tools/
 agent/.claude/settings.local.json
+captions/my_captions.yaml
+music/catalog.csv

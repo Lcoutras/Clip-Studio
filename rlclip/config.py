@@ -31,6 +31,11 @@ DEFAULTS = {
         "reaction_db": 12,
         "reaction_tail": 1.5,
         "hidden_categories": ["Fail?"],
+        # Tuned from what the Clip Agent learned (see agent/README.md). Points added to a kind
+        # of clip's score ({"reaction": -2, "popup:ASSIST": 1}), and seconds to move the
+        # start/end of a category's clips ({"Goal": [-1.5, 0.5]}).
+        "signal_adjust": {},
+        "timing_adjust": {},
     },
     "audio": {
         "voice_removal": "auto",
@@ -43,10 +48,14 @@ DEFAULTS = {
         "dir": "music",
         "volume": 0.9,
         "fade_out": 1.0,
+        # Which mood folder each category's music comes from, e.g. {"Fail?": "funny"}.
+        "mood_by_category": {},
     },
     "captions": {
         "source": "auto",
         "funny_ratio": 0.6,
+        # Share of funny captions per category, overriding funny_ratio: {"Save": 0.2}.
+        "tone_by_category": {},
         "model": "claude-opus-5-5",
         "library": "captions/library.yaml",
         "font": "auto",

@@ -67,9 +67,14 @@ Exports go to `output\<recording name>\vertical\`. Highlight videos go to `outpu
 
 MKV recordings can be analyzed and exported, but they can't be previewed in the player. Use OBS **File → Remux Recordings** to make an MP4.
 
-## Clip Agent (optional)
+## Clip Agent (optional, temporary)
 
-**`Clip Agent.bat`** opens Claude Code as your clip manager. It finds new recordings, picks the clips worth posting, writes TikTok, YouTube Shorts and Instagram captions, and fills `output\ready\` with clips ready to upload. It runs on your Claude subscription (no API bill) and never posts anything itself. Setup and details are in [agent/README.md](agent/README.md).
+**`Clip Agent.bat`** opens Claude Code as a first-line reviewer of Clip Studio's clips:
+- It checks the footage, caption, music and timing of each suggested clip, and fixes or rejects what's off. Its verdicts show here with a 🤖.
+- It adds better caption lines and properly licensed music.
+- It turns what it learns into settings for this app, and into a hand-off report for Claude to build into the app itself.
+
+It runs on your Claude subscription (no API bill) and never posts anything. See [agent/README.md](agent/README.md).
 
 ## Rocket League replays (recommended)
 

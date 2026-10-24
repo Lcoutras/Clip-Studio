@@ -1,5 +1,6 @@
 """Chooses a music track and finds its drop so the play can land on it."""
 
+import csv
 import json
 import random
 
@@ -8,6 +9,20 @@ import numpy as np
 from . import config, ffmpeg
 
 AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus"}
+
+# music/catalog.csv records where each added track came from and its license.
+CATALOG_FIELDS = ["file", "mood", "title", "artist", "license", "attribution", "source_url", "energy",
+                  "notes", "added"]
+LICENSES = {
+    "cc0": "Public domain (CC0)",
+    "pixabay": "Pixabay Content License",
+    "cc-by": "Creative Commons Attribution (credit the artist)",
+    "ncs": "NoCopyrightSounds (credit the artist)",
+    "yt-audio-library": "YouTube Audio Library",
+    "own": "Made or bought by Luke",
+    "other": "Other (see notes)",
+}
+NEEDS_CREDIT = {"cc-by", "ncs"}
 
 
 class MusicLibrary:
@@ -42,6 +57,30 @@ class MusicLibrary:
             if p.name.lower() == name.lower() or p.stem.lower() == name.lower():
                 return p
         return None
+
+    def catalog(self):
+        """{relative path: catalog row} for tracks added with their license details."""
+        path = self.root / "catalog.csv"
+        if not path.exists():
+            return {}
+        with open(path, newline="", encoding="utf-8") as f:
+            return {r["file"]: r for r in csv.DictReader(f)}
+
+    def add_to_catalog(self, row):
+        path = self.root / "catalog.csv"
+        rows = list(self.catalog().values())
+        rows = [r for r in rows if r["file"] != row["file"]] + [row]
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=CATALOG_FIELDS, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)
+
+    def credit(self, track_name):
+        """The attribution line a track's license asks for, or ''."""
+        for rel, row in self.catalog().items():
+            if rel.split("/")[-1].lower() == (track_name or "").lower() and row.get("license") in NEEDS_CREDIT:
+                return row.get("attribution") or f"Music: {row.get('title')} by {row.get('artist')}"
+        return ""
 
     def drop_time(self, track):
         key = f"{track.relative_to(self.root).as_posix()}|{track.stat().st_mtime:.0f}"

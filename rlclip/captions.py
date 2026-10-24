@@ -27,11 +27,46 @@ Rules:
 - Never invent a rank, score or player name you cannot see."""
 
 
+# Lines you (or the Clip Agent) add. Updates replace library.yaml but never this file.
+CUSTOM = "captions/my_captions.yaml"
+
+
+def load_library(cfg):
+    """The built-in caption library plus your own lines from my_captions.yaml."""
+    with open(config.resolve(cfg["library"]), encoding="utf-8") as f:
+        library = yaml.safe_load(f) or {}
+    custom = config.resolve(CUSTOM)
+    if custom.exists():
+        with open(custom, encoding="utf-8") as f:
+            for key, tones in (yaml.safe_load(f) or {}).items():
+                for tone, lines in (tones or {}).items():
+                    pool = library.setdefault(key, {}).setdefault(tone, [])
+                    library[key][tone] = (lines or []) + [l for l in pool if l not in (lines or [])]
+    return library
+
+
+def add_custom(label, tone, line):
+    """Add a line to my_captions.yaml. Returns False if it's already there."""
+    custom = config.resolve(CUSTOM)
+    data = {}
+    if custom.exists():
+        with open(custom, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    lines = data.setdefault(label, {}).setdefault(tone, [])
+    if line in lines:
+        return False
+    lines.append(line)
+    custom.parent.mkdir(parents=True, exist_ok=True)
+    with open(custom, "w", encoding="utf-8") as f:
+        f.write("# Your own caption lines (added by you or the Clip Agent). Updates never touch this file.\n")
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+    return True
+
+
 class CaptionPicker:
     def __init__(self, cfg, state_path):
         self.cfg = cfg["captions"]
-        with open(config.resolve(self.cfg["library"]), encoding="utf-8") as f:
-            self.library = yaml.safe_load(f) or {}
+        self.library = load_library(self.cfg)
         self.state_path = state_path
         try:
             with open(state_path, encoding="utf-8") as f:
@@ -53,8 +88,9 @@ class CaptionPicker:
         with open(self.state_path, "w", encoding="utf-8") as f:
             json.dump(sorted(self.used), f, indent=1)
 
-    def pick_tone(self):
-        return "funny" if random.random() < self.cfg["funny_ratio"] else "motivational"
+    def pick_tone(self, category=None):
+        ratio = (self.cfg.get("tone_by_category") or {}).get(category, self.cfg["funny_ratio"])
+        return "funny" if random.random() < float(ratio) else "motivational"
 
     def _pool(self, label, tone):
         keys = [label] + [fam for word, fam in FAMILIES if word in label] + ["ANY"]

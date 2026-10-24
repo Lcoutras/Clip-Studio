@@ -200,3 +200,7 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: v
 .learn-counts { font-size: 13px; margin: 10px 0; }
 .learn-rules { margin: 0 0 14px; padding-left: 18px; line-height: 1.5; }
 .learn-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.agent-verdict { font-size: 13px; margin: 0 0 10px; padding: 6px 8px; border-radius: 6px; background: var(--panel-2); }
+.agent-verdict.approved { border-left: 3px solid var(--keep); }
+.agent-verdict.rejected { border-left: 3px solid var(--remove); }
+.agent-verdict.flagged { border-left: 3px solid var(--c-funny); }
