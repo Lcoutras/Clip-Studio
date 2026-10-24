@@ -388,6 +388,7 @@ def cmd_review(cfg, args):
         if args.category not in highlights.CATEGORIES:
             raise SystemExit(f"--category must be one of: {', '.join(highlights.CATEGORIES)}")
         fields["category"] = args.category
+        fields["label"] = highlights.label_for(args.category, row["label"])
     if args.start is not None or args.end is not None:
         start = float(args.start if args.start is not None else row["start"])
         end = float(args.end if args.end is not None else row["end"])

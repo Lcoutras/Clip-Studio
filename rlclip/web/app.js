@@ -54,7 +54,8 @@ async function refreshState() {
   try { data = await api("/api/state"); } catch { return; }
   Object.assign(state, { videos: data.videos, replays: data.replays || [], jobs: data.jobs, music: data.music,
                          categories: data.categories, format: data.format, version: data.version,
-                         rejectReasons: data.reject_reasons || {} });
+                         rejectReasons: data.reject_reasons || {}, categoryLabels: data.category_labels || {},
+                         noStamp: data.no_stamp || [] });
   renderRecordings();
   renderStatus();
   renderUpdate(data.update);
@@ -447,9 +448,26 @@ function seekTo(t) {
 
 // ------------------------------------------------------------------ editor
 
+// The caption and stamp are only burned in on export; this shows roughly what they'll say.
+function renderPreview() {
+  const c = selClip();
+  const on = load("showPreview", true);
+  $("#show-preview").checked = on;
+  $("#preview").hidden = !on || !c;
+  if (!c) return;
+  $(".pv-caption").textContent = (c.caption || "").toUpperCase();
+  const stamp = (state.noStamp || []).includes(c.label) ? "" : `${c.label}!`;
+  const showStamp = stamp && Math.abs(player.currentTime - c.anchor) < 1.5 && state.playerVideo === c.video;
+  $(".pv-stamp").textContent = stamp + (c.stat ? `\n${c.stat}` : "");
+  $(".pv-stamp").classList.toggle("on", Boolean(showStamp));
+}
+$("#show-preview").onchange = ev => { store("showPreview", ev.target.checked); renderPreview(); };
+player.addEventListener("timeupdate", () => renderPreview());
+
 function renderEditor() {
   const c = selClip();
   renderSaveState();
+  renderPreview();
   $("#editor").style.visibility = c ? "visible" : "hidden";
   if (!c) return;
   $("#ed-title").textContent = c.label === "HIGHLIGHT" ? "Manual clip" : titleCase(c.label);
@@ -891,7 +909,20 @@ $("#ed-keep").onclick = () => {
   save(c.skip ? { skip: false, reject_reason: "" } : { skip: true });
   renderAll();
 };
-$("#ed-category").onchange = ev => { save({ category: ev.target.value }); renderAll(); };
+$("#ed-category").onchange = async ev => {
+  const c = selClip();
+  const category = ev.target.value;
+  save({ category });   // the server also updates the clip's type, which sets the stamp
+  renderAll();
+  // The new type and a caption for it; the old caption stays as the alternative.
+  try {
+    const s = await api("/api/caption", { label: c.label, tone: c.tone, category });
+    c.label = s.label;
+    save({ caption: s.caption, tone: s.tone, alt_caption: c.caption }, c);
+    if (selClip() === c) $("#ed-caption").value = s.caption;
+    renderAll();
+  } catch (e) { report(e); }
+};
 for (const b of $$("[data-nudge]")) {
   b.onclick = () => {
     const [which, d] = b.dataset.nudge.split(":");
@@ -900,13 +931,14 @@ for (const b of $$("[data-nudge]")) {
 }
 $("#set-start").onclick = () => setTrim("start", player.currentTime);
 $("#set-end").onclick = () => setTrim("end", player.currentTime);
-$("#ed-caption").oninput = ev => save({ caption: ev.target.value });
+$("#ed-caption").oninput = ev => { save({ caption: ev.target.value }); renderPreview(); };
 $("#ed-shuffle").onclick = async () => {
   const c = selClip();
   try {
     const s = await api("/api/caption", { label: c.label, tone: c.tone, category: c.category });
     save({ caption: s.caption, tone: s.tone });
     $("#ed-caption").value = s.caption;
+    renderPreview();
   } catch (e) { report(e); }
 };
 $("#ed-music").onchange = ev => save({ music: ev.target.value });

@@ -67,6 +67,11 @@
     <div class="player">
       <video id="player" playsinline preload="auto"></video>
       <div id="player-msg" class="player-msg" hidden></div>
+      <div id="preview" class="preview" aria-hidden="true">
+        <div class="pv-caption"></div>
+        <div class="pv-stamp"></div>
+        <div class="pv-tag">Preview of the export's caption and stamp</div>
+      </div>
     </div>
     <div class="transport">
       <button id="prev" title="Previous clip (↑)">&#9664;&#9664;</button>
@@ -75,6 +80,7 @@
       <button id="next" title="Next clip (↓)">&#9654;&#9654;</button>
       <span id="clock" class="clock">0:00</span>
       <div class="spacer"></div>
+      <label class="check small" title="Show the caption and stamp the export will have"><input type="checkbox" id="show-preview"> Caption preview</label>
       <button id="add-here" title="Make a clip around the current moment">&#43; Add moment here</button>
     </div>
     <div class="timeline">

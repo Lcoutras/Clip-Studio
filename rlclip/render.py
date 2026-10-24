@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import ffmpeg, overlays
+from . import ffmpeg, highlights, overlays
 
 SIZES = {"vertical": (1080, 1920), "horizontal": (1920, 1080)}
 
@@ -118,7 +118,7 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
     cap_png = workdir / f"caption_{layout}.png"
     overlays.caption_image(caption, (W, H), layout, font, cfg["captions"]["watermark"]).save(cap_png)
     label_png = None
-    if cfg["captions"]["show_event_label"] and label not in ("HYPE", "HIGHLIGHT", "FUNNY MOMENT", "FAIL?"):
+    if cfg["captions"]["show_event_label"] and label not in highlights.NO_STAMP:
         label_png = workdir / f"label_{layout}.png"
         overlays.label_image(label, (W, H), layout, font, stat).save(label_png)
 

@@ -191,3 +191,10 @@ def test_captions_follow_the_category(tmp_path):
     assert picker.from_library("FUNNY MOMENT", "funny", "Post") in post   # made a Post clip by hand
     assert picker.from_library("HIGHLIGHT", "funny", "Post") in post
     assert highlights.category_of("POST") == "Post" and "Post" in highlights.CATEGORIES
+
+
+def test_changing_category_changes_the_stamp_type():
+    assert highlights.label_for("Fail?", "FUNNY MOMENT") == "FAIL?"
+    assert highlights.label_for("Post", "GOAL") == "POST"
+    assert highlights.label_for("Save", "EPIC SAVE") == "EPIC SAVE"     # a more specific type that fits stays
+    assert highlights.label_for("Aerial", "AERIAL GOAL") == "AERIAL GOAL"

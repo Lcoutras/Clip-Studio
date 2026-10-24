@@ -8,6 +8,18 @@ from .feedback import signal_of
 CATEGORIES = ["Goal", "Aerial", "Save", "Demo", "Assist", "Post", "Funny Moment", "Fail?", "Manual"]
 
 
+# The type a clip gets when its category is changed by hand (it sets the stamp and captions).
+CATEGORY_LABELS = {"Goal": "GOAL", "Aerial": "AERIAL GOAL", "Save": "SAVE", "Demo": "DEMO", "Assist": "ASSIST",
+                   "Post": "POST", "Funny Moment": "FUNNY MOMENT", "Fail?": "FAIL?", "Manual": "HIGHLIGHT"}
+# Types that don't get a big stamp on the video (their caption does the talking).
+NO_STAMP = ("HYPE", "HIGHLIGHT", "FUNNY MOMENT", "FAIL?")
+
+
+def label_for(category, label):
+    """Keep a more specific type that already fits the category (EPIC SAVE stays EPIC SAVE)."""
+    return label if category_of(label) == category else CATEGORY_LABELS.get(category, label)
+
+
 def category_of(label):
     if label == "AERIAL GOAL":
         return "Aerial"

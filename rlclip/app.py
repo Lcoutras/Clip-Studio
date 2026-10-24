@@ -384,7 +384,8 @@ class Studio:
                 "categories": highlights.CATEGORIES,
                 "hidden_categories": self.cfg["detection"].get("hidden_categories", []),
                 "format": self.formats()[0], "version": __version__, "update": self.update,
-                "reject_reasons": feedback.REASONS}
+                "reject_reasons": feedback.REASONS, "category_labels": highlights.CATEGORY_LABELS,
+                "no_stamp": list(highlights.NO_STAMP)}
 
     def recording_label(self, path):
         """'Oct 23, 12:41 AM' from the recording's start time, or its file name."""
@@ -468,7 +469,7 @@ class Studio:
         proj = self.project(name)
         rows = proj.read_rows()
         numeric = {"start", "end", "game_volume", "music_volume", "crop_x"}
-        allowed = numeric | {"caption", "music", "skip", "tone", "framing", "category", "flag", "note",
+        allowed = numeric | {"caption", "alt_caption", "music", "skip", "tone", "framing", "category", "flag", "note",
                              "reject_reason"}
         for row in rows:
             if int(row["clip"]) != clip:
@@ -476,6 +477,8 @@ class Studio:
             for key, value in fields.items():
                 if key not in allowed:
                     continue
+                if key == "category" and value in highlights.CATEGORIES:
+                    row["label"] = highlights.label_for(value, row["label"])
                 if key in numeric:
                     value = f"{max(0.0, float(value)):.2f}"
                 elif key in ("skip", "flag"):
@@ -500,9 +503,11 @@ class Studio:
         picker = captions.CaptionPicker(self.cfg, self.out_root / ".captions_used.json")
         if tone not in ("funny", "motivational"):
             tone = random.choice(["funny", "motivational"])
+        if category in highlights.CATEGORIES:
+            label = highlights.label_for(category, label)
         line = picker.from_library(label, tone, category)
         picker.save_state()
-        return {"caption": line, "tone": tone}
+        return {"caption": line, "tone": tone, "label": label}
 
     def open_folder(self, name):
         folder = self.project(name).out_dir
