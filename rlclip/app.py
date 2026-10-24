@@ -62,7 +62,7 @@ class Studio:
     def _update_checker(self):
         while True:
             self.check_update()
-            time.sleep(6 * 3600)
+            time.sleep(30 * 60)
 
     def check_update(self):
         try:
