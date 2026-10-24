@@ -41,12 +41,12 @@ def test_highlights_merge_and_rank():
     ocr = [
         detect.Event(100.5, "SHOT", 1, "chill", "ocr"),
         detect.Event(103.0, "EPIC SAVE", 8, "hype", "ocr"),
-        detect.Event(300.0, "ASSIST", 3, "chill", "ocr"),
+        detect.Event(300.0, "SHOT", 1, "chill", "ocr"),
     ]
     peaks = [(102.7, 18.0), (500.0, 22.0)]
     found = highlights.build(ocr, peaks, [], det, duration=600)
     labels = [h.label for h in found]
-    assert labels == ["EPIC SAVE"]   # lone ASSIST is below min_score, audio alone isn't a clip
+    assert labels == ["EPIC SAVE"]   # a lone SHOT is below min_score, audio alone isn't a clip
     save = found[0]
     assert save.anchor == 102.7                      # snapped to the audio hit
     assert save.start == round(102.7 - det["pre_seconds"], 2)
@@ -170,3 +170,10 @@ def test_gameplay_uses_scoreboard_when_seen_and_keeps_post_goal_reactions():
     found = highlights.build(goal, [], [], det, 200, [(30.0, 25.0), (123.0, 25.0)], is_gameplay=is_gameplay)
     assert [h.label for h in found] == ["GOAL"]               # no clip from the intro
     assert found[0].end >= 123.0                             # the celebration during the replay is kept
+
+
+def test_lone_assist_is_a_clip_with_the_pass():
+    det = config.load()["detection"]
+    found = highlights.build([detect.Event(300.0, "ASSIST", *detect.EVENTS["ASSIST"][1:], "ocr")], [], [], det, 600)
+    assert [h.category for h in found] == ["Assist"]
+    assert found[0].start == 300.0 - det["pre_seconds"] - 2

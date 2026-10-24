@@ -33,7 +33,7 @@ EVENTS = {
     "GOAL": ("GOAL", 5, "hype"),
     "DEMOLITION": ("DEMO", 4, "funny"),
     "SAVE": ("SAVE", 4, "chill"),
-    "ASSIST": ("ASSIST", 3, "chill"),
+    "ASSIST": ("ASSIST", 6, "hype"),   # your pass set up a goal: a clip on its own
     "SHOT ON GOAL": ("SHOT", 1, "chill"),
 }
 # Longest first so "EPIC SAVE" wins over "SAVE" and "AERIAL GOAL" over "GOAL".

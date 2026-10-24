@@ -159,7 +159,9 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
         category = category_of(best.label)
         # Only the moments that matter set the window; a stray blip shouldn't add lead-in.
         span = [e for e in group if e.weight >= best.weight * 0.5]
-        start = min(e.time for e in span) - det["pre_seconds"]
+        # An assist's pass happens a few seconds before the goal it set up: show it.
+        lead = det["pre_seconds"] + (2.0 if best.label in ("ASSIST", "PLAYMAKER") else 0.0)
+        start = min(e.time for e in span) - lead
         end = max(e.time for e in span) + det["post_seconds"]
         if reacts:
             # Keep the reaction: end a moment after the last one.
