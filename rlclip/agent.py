@@ -479,18 +479,29 @@ def cmd_music_add(cfg, args):
         raise SystemExit("That file has no audio in it.")
     if not 20 <= dur <= 600:
         raise SystemExit(f"That's {dur:.0f}s long; tracks should be 20 seconds to 10 minutes.")
-    out = lib.root / args.mood / f"{_slug(args.artist)}_{_slug(args.title)}.mp3"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    # mp3 (also pulls the audio out of an mp4).
-    ffmpeg.run(["-i", src, "-vn", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "192k", out])
-    if src.parent == work:
-        src.unlink(missing_ok=True)
-    lib.add_to_catalog({"file": out.relative_to(lib.root).as_posix(), "mood": args.mood, "title": args.title,
+    root = lib.root.resolve()
+    if root in src.resolve().parents and src.suffix.lower() in music.AUDIO_EXT:
+        # Already in the music folder (added by hand): catalog it where it is, no copy.
+        out = src.resolve()
+        rel = out.relative_to(root).as_posix()
+        if "/" in rel and rel.split("/")[0] != args.mood:
+            print(f"Note: it's in the {rel.split('/')[0]} folder, so it's used for that mood. "
+                  f"Move the file to {args.mood}/ to change that.")
+    else:
+        out = lib.root / args.mood / f"{_slug(args.artist)}_{_slug(args.title)}.mp3"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        # mp3 (also pulls the audio out of an mp4).
+        ffmpeg.run(["-i", src, "-vn", "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "192k", out])
+        if src.parent == work:
+            src.unlink(missing_ok=True)
+    rel = out.relative_to(root if out.is_absolute() and root in out.parents else lib.root).as_posix()
+    lib.add_to_catalog({"file": rel, "mood": rel.split("/")[0] if "/" in rel else args.mood, "title": args.title,
                         "artist": args.artist, "license": args.license, "attribution": args.attribution or "",
                         "source_url": args.source_url or (args.source if "://" in args.source else ""),
                         "energy": args.energy or "", "notes": args.notes or "",
                         "added": time.strftime("%Y-%m-%d")})
-    print(f"Added {out.name} to {args.mood} ({dur:.0f}s, drop at {lib.drop_time(out):.0f}s)")
+    track = lib.root / rel
+    print(f"Cataloged {rel} ({dur:.0f}s, drop at {lib.drop_time(track):.0f}s)")
     return 0
 
 

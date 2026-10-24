@@ -35,7 +35,7 @@ Run from this folder with `../.venv/Scripts/python.exe tool.py <command>`:
 | `review "<recording>" <clip> [--approve / --reject REASON / --flag] [--note "..."] [--caption "..."] [--tone funny/motivational] [--music <file>/auto/none] [--category ...] [--start S --end E]` | Your verdict and edits. REASON: not_gameplay, not_mine, boring, timing, duplicate, other. Always add a `--note` with your reasoning. |
 | `caption-add <LABEL> <tone> "line"` | Add a caption line to the library (`captions/my_captions.yaml`). LABEL is a library section: GOAL, AERIAL GOAL, EPIC SAVE, SAVE, ASSIST, DEMO, FUNNY MOMENT, FAIL?, ANY... |
 | `music-list` | Tracks with mood folder, length, where the drop is, license and energy |
-| `music-add <link or file> --mood hype/funny/chill --title ... --artist ... --license ... [--attribution ...] [--source-url ...] [--energy low/medium/high] [--notes ...]` | Download a licensed track (mp3, or an mp4 it extracts audio from) into the music folder and catalog it |
+| `music-add <link or file> --mood hype/funny/chill --title ... --artist ... --license ... [--attribution ...] [--source-url ...] [--energy low/medium/high] [--notes ...]` | Download a licensed track (mp3, or an mp4 it extracts audio from) into the music folder and catalog it. For a file **already in the music folder** (added by hand), it catalogs it in place with no copy. |
 | `distill` | Your decisions turned into proposed settings, with evidence |
 | `apply-settings` | Writes the proposals into Luke's settings.yaml. **Only after Luke says yes.** |
 | `handoff` | Writes `handoff.md`, everything learned, for Luke to send to Claude |

@@ -177,3 +177,12 @@ def test_music_add_from_file_and_credit(tmp_path, monkeypatch):
     assert music_lib.credit("Some-Artist_Boost.mp3") == "Music: Boost by Some Artist"
     with pytest.raises(SystemExit):
         agent._download("https://www.youtube.com/watch?v=x", tmp_path / "x")
+    # A file already in the music folder is cataloged where it is, not copied.
+    by_hand = tmp_path / "music" / "funny" / "Fluffing a Duck.mp3"
+    by_hand.parent.mkdir(parents=True)
+    shutil.copy(lib.tracks("hype")[0], by_hand)
+    agent.cmd_music_add(cfg, type("A", (), {**base, "source": str(by_hand), "mood": "funny", "license": "cc-by",
+                                            "title": "Fluffing a Duck", "artist": "Kevin MacLeod",
+                                            "attribution": "Music: Fluffing a Duck by Kevin MacLeod (incompetech.com) CC BY 4.0"})())
+    assert [t.name for t in lib.tracks("funny")] == ["Fluffing a Duck.mp3"]
+    assert lib.credit("Fluffing a Duck.mp3").startswith("Music: Fluffing a Duck")
