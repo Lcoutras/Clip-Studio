@@ -494,11 +494,11 @@ class Studio:
     def add_manual(self, name, at):
         return self.project(name).add_manual(at)
 
-    def suggest_caption(self, label, tone):
+    def suggest_caption(self, label, tone, category=None):
         picker = captions.CaptionPicker(self.cfg, self.out_root / ".captions_used.json")
         if tone not in ("funny", "motivational"):
             tone = random.choice(["funny", "motivational"])
-        line = picker.from_library(label, tone)
+        line = picker.from_library(label, tone, category)
         picker.save_state()
         return {"caption": line, "tone": tone}
 
@@ -644,7 +644,8 @@ def make_handler(studio):
                 if path == "/api/add":
                     return self._json(studio.add_manual(data["video"], float(data["at"])))
                 if path == "/api/caption":
-                    return self._json(studio.suggest_caption(data.get("label", ""), data.get("tone")))
+                    return self._json(studio.suggest_caption(data.get("label", ""), data.get("tone"),
+                                                               data.get("category")))
                 if path == "/api/learning/reset":
                     return self._json(studio.reset_learning())
                 if path == "/api/learning/report":

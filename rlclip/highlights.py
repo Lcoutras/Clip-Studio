@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass, field
 from .detect import Event
 from .feedback import signal_of
 
-CATEGORIES = ["Goal", "Aerial", "Save", "Demo", "Assist", "Funny Moment", "Fail?", "Manual"]
+CATEGORIES = ["Goal", "Aerial", "Save", "Demo", "Assist", "Post", "Funny Moment", "Fail?", "Manual"]
 
 
 def category_of(label):
@@ -13,7 +13,9 @@ def category_of(label):
         return "Aerial"
     if label == "FAIL?":
         return "Fail?"
-    if label in ("FUNNY MOMENT", "POST"):
+    if label == "POST":
+        return "Post"
+    if label == "FUNNY MOMENT":
         return "Funny Moment"
     if label == "AERIAL HIT":
         return "Aerial"

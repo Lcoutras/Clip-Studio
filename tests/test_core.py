@@ -177,3 +177,17 @@ def test_lone_assist_is_a_clip_with_the_pass():
     found = highlights.build([detect.Event(300.0, "ASSIST", *detect.EVENTS["ASSIST"][1:], "ocr")], [], [], det, 600)
     assert [h.category for h in found] == ["Assist"]
     assert found[0].start == 300.0 - det["pre_seconds"] - 2
+
+
+def test_captions_follow_the_category(tmp_path):
+    cfg = config.load()
+    picker = captions.CaptionPicker(cfg, tmp_path / "used.json")
+    assist = set(picker.library["ASSIST"]["funny"])
+    fail = set(picker.library["FAIL?"]["funny"])
+    post = set(picker.library["POST"]["funny"])
+    assert picker.from_library("ASSIST", "funny") in assist
+    assert picker.from_library("ASSIST", "funny", "Assist") in assist
+    assert picker.from_library("GOAL", "funny", "Fail?") in fail          # re-labelled in Clip Studio
+    assert picker.from_library("FUNNY MOMENT", "funny", "Post") in post   # made a Post clip by hand
+    assert picker.from_library("HIGHLIGHT", "funny", "Post") in post
+    assert highlights.category_of("POST") == "Post" and "Post" in highlights.CATEGORIES

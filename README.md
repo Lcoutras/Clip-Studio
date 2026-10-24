@@ -35,8 +35,8 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 
 1. **Import:** drag one or more recordings (or a folder) onto the window, or click **Import** to browse. Analysis starts on its own, one recording after another.
 2. **Analyze:** Clip Studio reads the game's popups, listens for goal explosions, and picks up reactions on your mic track. A reaction right after a play stays in that clip, and replays don't become separate clips.
-3. **Review:** the recording menu at the top starts on **All recordings**, so clips from every recording show up in one list as each one finishes analyzing (a ⏳ row at the top shows what's still running). Each clip says which recording it's from, and clicking it loads that recording in the player. Pick a single recording in the menu to see only its clips. Suggested clips are labeled **Goal, Aerial, Save, Demo, Assist, Funny Moment, Fail?** with the reason each was picked.
-   - Click a category chip to hide or show that type.
+3. **Review:** the recording menu at the top starts on **All recordings**, so clips from every recording show up in one list as each one finishes analyzing (a ⏳ row at the top shows what's still running). Each clip says which recording it's from, and clicking it loads that recording in the player. Pick a single recording in the menu to see only its clips. Suggested clips are labeled **Goal, Aerial, Save, Demo, Assist, Post, Funny Moment, Fail?** with the reason each was picked.
+   - Click a category chip to hide or show that type. Captions follow the category: change a clip's category (e.g. to **Post** or **Fail?**) and 🎲 picks lines for that type.
    - **Fail?** clips (someone else scored) start out hidden. Tick **Show rejected** to see them.
    - Missed something? Scrub the **Whole recording** bar and click **+ Add moment here**.
 4. **Edit** (right panel):

@@ -6,7 +6,7 @@ const player = $("#player");
 
 const COLORS = {
   "Goal": "var(--c-goal)", "Aerial": "var(--c-aerial)", "Save": "var(--c-save)", "Demo": "var(--c-demo)",
-  "Assist": "var(--c-assist)", "Funny Moment": "var(--c-funny)", "Fail?": "var(--c-fail)", "Manual": "var(--c-manual)",
+  "Assist": "var(--c-assist)", "Post": "var(--c-post)", "Funny Moment": "var(--c-funny)", "Fail?": "var(--c-fail)", "Manual": "var(--c-manual)",
 };
 
 const state = {
@@ -882,7 +882,7 @@ $("#ed-caption").oninput = ev => save({ caption: ev.target.value });
 $("#ed-shuffle").onclick = async () => {
   const c = selClip();
   try {
-    const s = await api("/api/caption", { label: c.label, tone: c.tone });
+    const s = await api("/api/caption", { label: c.label, tone: c.tone, category: c.category });
     save({ caption: s.caption, tone: s.tone });
     $("#ed-caption").value = s.caption;
   } catch (e) { report(e); }

@@ -20,7 +20,8 @@ CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "t
 
 HASHTAGS = {
     "Goal": "#rocketleaguegoals", "Aerial": "#rocketleaguemechanics", "Save": "#rocketleaguesaves",
-    "Demo": "#rocketleaguedemo", "Assist": "#rocketleague3v3", "Funny Moment": "#rocketleaguefunny",
+    "Demo": "#rocketleaguedemo", "Assist": "#rocketleague3v3", "Post": "#rocketleaguefunny",
+    "Funny Moment": "#rocketleaguefunny",
     "Fail?": "#rocketleaguefails", "Manual": "#rocketleagueclips",
 }
 
@@ -308,7 +309,7 @@ class Project:
                    "skip": "yes" if hidden else "", "reason": h.get("reason", ""), "source": "auto",
                    "stat": h.get("stat", "")}
             tone = picker.pick_tone(category)
-            library_line = picker.from_library(h["label"], tone)
+            library_line = picker.from_library(h["label"], tone, category)
             ai_line = None
             if picker.client:
                 print(f"  [{h['index']:02d}] writing AI caption...")
@@ -317,7 +318,7 @@ class Project:
                 ai_line = picker.from_ai(video, h["anchor"] - h["start"], h["label"], tone,
                                          _workdir(self.out_dir, row))
             row.update(tone=tone, caption=ai_line or library_line,
-                       alt_caption=library_line if ai_line else picker.from_library(h["label"], tone))
+                       alt_caption=library_line if ai_line else picker.from_library(h["label"], tone, category))
             rows.append(row)
         picker.save_state()
         for anchor, note in carry:
@@ -359,8 +360,8 @@ class Project:
         row = {"clip": max([int(r["clip"]) for r in rows] + [0]) + 1, "label": label, "category": "Manual",
                "score": "", "start": f"{max(0.0, at - det['pre_seconds']):.2f}",
                "end": f"{min(self.info.duration, at + det['post_seconds'] + 1):.2f}", "anchor": f"{at:.2f}",
-               "tone": tone, "caption": picker.from_library(label, tone),
-               "alt_caption": picker.from_library(label, tone), "music": "", "skip": "",
+               "tone": tone, "caption": picker.from_library(label, tone, "Manual"),
+               "alt_caption": picker.from_library(label, tone, "Manual"), "music": "", "skip": "",
                "reason": "Added by you", "source": "manual"}
         picker.save_state()
         rows.append(row)

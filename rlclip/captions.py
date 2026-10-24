@@ -13,7 +13,11 @@ import yaml
 
 from . import config, ffmpeg
 
-FAMILIES = [("GOAL", "GOAL"), ("SAVE", "SAVE"), ("SAVIOR", "SAVE"), ("DEMO", "DEMO")]
+FAMILIES = [("GOAL", "GOAL"), ("SAVE", "SAVE"), ("SAVIOR", "SAVE"), ("DEMO", "DEMO"), ("ASSIST", "ASSIST"),
+            ("PLAYMAKER", "ASSIST"), ("AERIAL", "AERIAL GOAL")]
+# The library section for each clip category (the category can be changed in Clip Studio).
+CATEGORY_KEYS = {"Goal": "GOAL", "Aerial": "AERIAL GOAL", "Save": "SAVE", "Demo": "DEMO", "Assist": "ASSIST",
+                 "Post": "POST", "Funny Moment": "FUNNY MOMENT", "Fail?": "FAIL?", "Manual": "ANY"}
 
 SYSTEM_PROMPT = """You write the on-screen caption for short vertical Rocket League highlight clips \
 (TikTok / YouTube Shorts). The clip has no voice-over, so the caption carries the personality.
@@ -92,8 +96,14 @@ class CaptionPicker:
         ratio = (self.cfg.get("tone_by_category") or {}).get(category, self.cfg["funny_ratio"])
         return "funny" if random.random() < float(ratio) else "motivational"
 
-    def _pool(self, label, tone):
+    def _pool(self, label, tone, category=None):
+        from .highlights import category_of
         keys = [label] + [fam for word, fam in FAMILIES if word in label] + ["ANY"]
+        if category in CATEGORY_KEYS and category != category_of(label):
+            # The category was changed (e.g. a goal re-labelled Fail?): its lines come first.
+            keys = [CATEGORY_KEYS[category]] + keys
+        elif category in CATEGORY_KEYS:
+            keys.insert(1, CATEGORY_KEYS[category])
         for key in keys:
             lines = (self.library.get(key) or {}).get(tone) or []
             # An unquoted "a: b" line in YAML loads as a dict; turn it back into text.
@@ -103,8 +113,8 @@ class CaptionPicker:
                 return lines
         return ["Certified clip moment"]
 
-    def from_library(self, label, tone):
-        pool = self._pool(label, tone)
+    def from_library(self, label, tone, category=None):
+        pool = self._pool(label, tone, category)
         fresh = [c for c in pool if c not in self.used]
         if not fresh:
             # Everything in this pool has been used: allow repeats again.
