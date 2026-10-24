@@ -2,6 +2,22 @@
 # The tool looks for the clip's exact label first (e.g. "AERIAL GOAL"), then its
 # family (GOAL / SAVE / DEMO), then ANY. Each section has funny and motivational lines.
 
+POST:
+  funny:
+    - "My teammate's name is Post. We're mates."
+    - "Postmates delivered. Just not into the net."
+    - Hit the post so often it's in my name
+    - The post and I are in a relationship
+    - "Not a miss. A brand partnership."
+    - "Post: 1. Me: 0."
+    - Aimed for the net, the post had other plans
+    - Rent is due and the post collects
+  motivational:
+    - "Inches away. Again tomorrow."
+    - "Close only counts in horseshoes. Run it back."
+    - The post won't stop me forever
+    - One inch from the highlight reel
+
 AERIAL GOAL:
   funny:
     - "POV: the air roll finally clicked"
