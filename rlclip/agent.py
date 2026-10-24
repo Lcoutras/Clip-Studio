@@ -150,6 +150,7 @@ def cmd_status(cfg, args):
     fb = feedback.Feedback(pipeline.feedback_path(cfg)).summary()
     print(f"Your feedback: {fb['rejected']} rejected, {fb['kept']} exported"
           + (f"; rules: {' | '.join(fb['rules'])}" if fb["rules"] else ""))
+    print(f"Notes folder: {agent_dir(cfg)}   Ready folder: {ready_dir(cfg)}")
     knowledge = agent_dir(cfg) / "knowledge.md"
     print(f"Knowledge file: {knowledge} ({'exists' if knowledge.exists() else 'not created yet'})")
     return 0

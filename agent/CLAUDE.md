@@ -22,7 +22,7 @@ Run everything from this folder with `../.venv/Scripts/python.exe tool.py <comma
 | `posted <item> --platform tiktok/youtube/instagram [--url ...]` | Records that Luke posted it |
 | `feedback` | Every clip Luke rejected in Clip Studio and why, plus what the detector learned |
 
-Write post JSON files in `../output/agent/posts/`. Keep your own notes in `../output/agent/` (that folder survives app updates).
+`status` prints your **notes folder** (normally `../output/agent/`, which survives app updates). Keep your notes there, and write post JSON files in its `posts/` subfolder. Everywhere below, `../output/` means the output folder `status` reports.
 
 ## Hard rules
 1. **Never post, upload or message anyone.** You prepare everything and Luke uploads. You can't reach those apps, and posting is his call.
