@@ -267,7 +267,7 @@ async function loadClips() {
   let data;
   try { data = await fetchClips(); } catch (e) { return report(e); }
   // Keep unsaved edits of clips already on screen (their saves are on the way).
-  const edited = new Map(state.clips.filter(c => pending.has(c.key)).map(c => [c.key, c]));
+  const edited = new Map(state.clips.filter(c => pending.has(c.key) || inflight.has(c.key)).map(c => [c.key, c]));
   state.clips = data.clips.map(c => edited.get(c.key) || c);
   Object.assign(state, { sources: data.sources, warnings: data.warnings, notes: data.notes });
   const hadSelection = Boolean(selClip());
@@ -289,15 +289,17 @@ function loadPlayer(video, t) {
 }
 
 // Clips can change outside this window: the Clip Agent edits captions, music and verdicts.
-// Reload when a recording's clip sheet changes, unless the change was our own save.
-let lastSave = 0;
+// Reload when a recording's clip sheet changes, unless the change was our own save (flush
+// records the version each of our saves produced).
 function syncExternalEdits() {
   const inView = state.videos.filter(v => state.current === ALL || v.name === state.current);
   const revs = Object.fromEntries(inView.map(v => [v.name, v.rev]));
-  const changed = state.revs && Object.entries(revs).some(([k, r]) => r && state.revs[k] !== undefined && state.revs[k] !== r);
-  if (changed && (pending.size || typing())) return;   // check again once our own edit is saved
-  if (changed && Date.now() - lastSave > 2500) loadClips();   // a save of ours just landed: that's not news
-  state.revs = revs;
+  const changed = state.revs && Object.entries(revs).some(([k, r]) => r && state.revs[k] !== undefined && state.revs[k] < r);
+  if (changed && (pending.size || inflight.size || typing())) return;   // check again after our saves land
+  if (changed) loadClips();
+  const merged = { ...(state.revs || {}) };
+  for (const [k, r] of Object.entries(revs)) merged[k] = Math.max(merged[k] || 0, r || 0);
+  state.revs = merged;
 }
 
 async function softRefresh() {
@@ -447,6 +449,7 @@ function seekTo(t) {
 
 function renderEditor() {
   const c = selClip();
+  renderSaveState();
   $("#editor").style.visibility = c ? "visible" : "hidden";
   if (!c) return;
   $("#ed-title").textContent = c.label === "HIGHLIGHT" ? "Manual clip" : titleCase(c.label);
@@ -522,17 +525,36 @@ function save(fields, clip = selClip()) {
   const entry = pending.get(clip.key) || { clip, fields: {} };
   Object.assign(entry.fields, fields);
   pending.set(clip.key, entry);
+  saveFailed = false;
+  renderSaveState();
   flush();
 }
+const inflight = new Set();   // clip keys whose save is on its way to the server
 const flush = debounce(async () => {
   const batch = [...pending.values()];
   pending.clear();
+  for (const { clip } of batch) inflight.add(clip.key);
+  renderSaveState();
   for (const { clip, fields } of batch) {
-    lastSave = Date.now();
-    try { await api("/api/clip", { video: clip.video, clip: clip.clip, fields }); }
-    catch (e) { report(e); }
+    try {
+      const res = await api("/api/clip", { video: clip.video, clip: clip.clip, fields });
+      // Our own write: remember its version so it isn't mistaken for an outside edit.
+      if (state.revs && res.rev) state.revs[clip.video] = res.rev;
+    } catch (e) { saveFailed = true; report(e); }
+    inflight.delete(clip.key);
   }
+  renderSaveState();
 }, 350);
+
+let saveFailed = false;
+function renderSaveState() {
+  const el = $("#save-state");
+  if (!el) return;
+  const c = selClip();
+  const busy = c && (pending.has(c.key) || inflight.has(c.key));
+  el.textContent = busy ? "Saving\u2026" : saveFailed ? "Not saved \u2014 try again" : c ? "\u2713 Saved" : "";
+  el.className = "save-state" + (busy ? " busy" : saveFailed ? " failed" : "");
+}
 
 function setTrim(which, t) {
   const c = selClip();

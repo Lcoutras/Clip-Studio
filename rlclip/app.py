@@ -487,9 +487,11 @@ class Studio:
                 row["reject_reason"] = ""
             if "skip" in fields or "reject_reason" in fields:
                 proj.write_rows(rows)
+                rev = proj.csv_path.stat().st_mtime
                 self.learn_rejected(proj, row, pipeline.is_skipped(row))
-                return
+                return rev
         proj.write_rows(rows)
+        return proj.csv_path.stat().st_mtime
 
     def add_manual(self, name, at):
         return self.project(name).add_manual(at)
@@ -639,8 +641,8 @@ def make_handler(studio):
                 if path == "/api/analyze_all":
                     return self._json({"started": studio.analyze_all(data.get("speed", "standard"))})
                 if path == "/api/clip":
-                    studio.update_clip(data["video"], int(data["clip"]), data["fields"])
-                    return self._json({"ok": True})
+                    return self._json({"ok": True, "rev": studio.update_clip(data["video"], int(data["clip"]),
+                                                                            data["fields"])})
                 if path == "/api/add":
                     return self._json(studio.add_manual(data["video"], float(data["at"])))
                 if path == "/api/caption":

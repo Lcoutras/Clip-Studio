@@ -205,3 +205,6 @@ h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: v
 .agent-verdict.approved { border-left: 3px solid var(--keep); }
 .agent-verdict.rejected { border-left: 3px solid var(--remove); }
 .agent-verdict.flagged { border-left: 3px solid var(--c-funny); }
+.save-state { margin-left: 6px; color: var(--keep); }
+.save-state.busy { color: var(--muted); }
+.save-state.failed { color: var(--remove); }
