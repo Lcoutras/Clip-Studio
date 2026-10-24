@@ -141,6 +141,15 @@ def build(ocr_events, peaks, markers, det, duration, reactions=None, mixed_audio
     # A reaction on its own only counts during a match (not in menus, loading screens or intros).
     # Reactions right after a play were kept above even if the goal replay hid the scoreboard.
     standalone = [(t, db) for t, db in standalone if is_gameplay(t)]
+    # ...and only when something happened in the game just before it (a hit, explosion or demo
+    # in the game audio). Laughing at a Discord joke or talking over a quiet moment isn't a clip.
+    if not mixed_audio and det.get("reaction_needs_game_sound", True):
+        standalone = [(t, db) for t, db in standalone if any(t - 4.0 <= pt <= t + 0.5 for pt, _ in peaks)]
+    # A talkative session would otherwise be all reactions: keep the loudest few.
+    per10 = det.get("max_reactions_per_10min", 3)
+    if per10:
+        cap = max(1, round(duration / 600 * per10))
+        standalone = sorted(sorted(standalone, key=lambda r: -r[1])[:cap])
     for t, db in standalone:
         # With voices mixed into the game audio, a "reaction" may just be a loud game sound.
         weight = min(5.5 if mixed_audio else 7.0, 3 + (db - det["reaction_db"]) / 3)

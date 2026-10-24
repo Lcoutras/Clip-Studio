@@ -86,7 +86,7 @@ def test_reactions_extend_plays_and_make_funny_moments():
     det = config.load()["detection"]
     ocr = [detect.Event(100.0, "GOAL", 7, "hype", "ocr", "GOAL +100")]
     reactions = [(103.0, 20.0), (300.0, 22.0)]   # one right after the goal, one on its own
-    found = highlights.build(ocr, [(100.0, 25.0)], [], det, 600, reactions)
+    found = highlights.build(ocr, [(100.0, 25.0), (298.0, 15.0)], [], det, 600, reactions)
     goal, funny = found
     assert goal.category == "Goal" and goal.end == round(103.0 + det["reaction_tail"], 2)
     assert "reaction" in goal.reason and "goal explosion" in goal.reason
@@ -107,7 +107,7 @@ def test_reactions_in_menus_are_ignored():
     is_gameplay = detect.gameplay_checker(menu + match)
     reactions = [(30.0, 25.0), (90.0, 25.0)]
     fails = [detect.Event(40.0, "FAIL?", 5, "funny", "ocr"), detect.Event(100.0, "FAIL?", 5, "funny", "ocr")]
-    found = highlights.build(fails, [], [], det, 200, reactions, is_gameplay=is_gameplay)
+    found = highlights.build(fails, [(28.0, 15.0), (88.0, 15.0)], [], det, 200, reactions, is_gameplay=is_gameplay)
     assert all(h.anchor >= 60 for h in found)
     assert {h.category for h in found} == {"Funny Moment", "Fail?"}
 
@@ -198,3 +198,20 @@ def test_changing_category_changes_the_stamp_type():
     assert highlights.label_for("Post", "GOAL") == "POST"
     assert highlights.label_for("Save", "EPIC SAVE") == "EPIC SAVE"     # a more specific type that fits stays
     assert highlights.label_for("Aerial", "AERIAL GOAL") == "AERIAL GOAL"
+
+
+def test_reactions_need_something_in_the_game_and_are_capped():
+    """52 'Big reaction on the mic' clips in one 20-minute session: chatting isn't a play."""
+    det = config.load()["detection"]
+    talk = [(t, 20.0 + (t % 7)) for t in range(30, 1200, 23)]          # loud mic all session
+    game = [(t - 1.5, 15.0) for t, _ in talk[::2]]                      # the game did something before half
+    found = highlights.build([], game, [], det, 1200, talk)
+    assert len(found) == round(1200 / 600 * det["max_reactions_per_10min"])   # loudest few only
+    assert all(any(h.anchor - 4 <= g <= h.anchor + 0.5 for g, _ in game) for h in found)
+    assert highlights.build([], [], [], det, 1200, talk) == []          # no game sound: just talking
+
+
+def test_goal_replay_frames_are_not_new_plays():
+    replay = "SCORED BY [TTV] postmates85 PASSENGER PRINCESS 0:36 68 MPH GOAL PRESS TO TOGGLE VIEW PRESS TO SKIP"
+    assert detect.classify_frame(replay.split(" "), ["postmates85"]) == []
+    assert not detect.other_scorer("SCORED BY AYYR0N7321 GOAL PRESS TOSKIP".split(" "), ["postmates85"])

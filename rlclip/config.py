@@ -30,6 +30,10 @@ DEFAULTS = {
         "player_names": [],
         "reaction_db": 12,
         "reaction_tail": 1.5,
+        # A voice reaction on its own only becomes a clip when the game made a sound just before it,
+        # and at most this many per 10 minutes of recording (the loudest win).
+        "reaction_needs_game_sound": True,
+        "max_reactions_per_10min": 3,
         "hidden_categories": ["Fail?"],
         # Tuned from what the Clip Agent learned (see agent/README.md). Points added to a kind
         # of clip's score ({"reaction": -2, "popup:ASSIST": 1}), and seconds to move the

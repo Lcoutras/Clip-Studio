@@ -37,9 +37,9 @@ def test_repeated_rejections_rank_that_kind_lower(tmp_path):
 
     det = config.load()["detection"]
     report = {}
-    found = highlights.build([], [], [], det, 300, [(100.0, 22.0)], learned=learned, report=report)
+    found = highlights.build([], [(99.0, 15.0)], [], det, 300, [(100.0, 22.0)], learned=learned, report=report)
     assert found == [] and report["lowered"] == {"reaction": 1}
-    assert len(highlights.build([], [], [], det, 300, [(100.0, 22.0)])) == 1
+    assert len(highlights.build([], [(99.0, 15.0)], [], det, 300, [(100.0, 22.0)])) == 1
 
 
 def test_unreject_forgets_and_keeps_balance(tmp_path):
@@ -77,7 +77,7 @@ def test_rejected_screen_is_recognized():
 
     det = config.load()["detection"]
     report = {}
-    found = highlights.build([], [], [], det, 300, [(100.0, 22.0)], veto=lambda h: True, report=report)
+    found = highlights.build([], [(99.0, 15.0)], [], det, 300, [(100.0, 22.0)], veto=lambda h: True, report=report)
     assert found == [] and report["vetoed"] == 1
     replay_goal = [Event(100.0, "GOAL", 8, "hype", "replay", "your goal")]
     assert highlights.build(replay_goal, [], [], det, 300, veto=lambda h: True)   # replays are trusted

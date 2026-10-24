@@ -88,6 +88,17 @@ def match_keywords(texts):
 # GOALS / SAVES / "2EpicSaves", so a frame containing any of these is never a play.
 MENU_MARKERS = ("SCOREBOARD", "PING", "CHALLENGE", "REWARD", "CLAIM", "WINS:", "DIVISION",
                 "REPLAY", "MVP", "PLAYLIST", "MATCHES", "CANCEL", "TIER")
+# The button prompts on goal replays ("PRESS (X) TO SKIP", "PRESS (A) TO TOGGLE VIEW"). The replay shows
+# the scorer's banner again a few seconds after the real goal; it isn't a new play. ("SCORED BY" isn't
+# a marker: the live hat-trick popup says it too.)
+REPLAY_MARKERS = ("TOSKIP", "TOGGLEVIEW")
+
+
+def is_replay_frame(raw):
+    compact = re.sub(r"[^A-Z]", "", raw.upper())
+    return any(m in compact for m in REPLAY_MARKERS)
+
+
 _POINTS = re.compile(r"\+\s?\d{2,3}(?!\d)")
 _DIGIT_LOOKALIKES = str.maketrans("01584", "OISBA")
 
@@ -107,7 +118,7 @@ def classify_frame(texts, player_names=()):
     if not texts or len(texts) > 12:
         return []
     raw = " ".join(texts).upper()
-    if any(marker in raw for marker in MENU_MARKERS):
+    if any(marker in raw for marker in MENU_MARKERS) or is_replay_frame(raw):
         return []
     folded = _fold(raw)
     names = [_fold(n) for n in player_names if n]
@@ -129,7 +140,7 @@ def other_scorer(texts, player_names=()):
     if not texts or len(texts) > 12 or not player_names:
         return False
     raw = " ".join(texts).upper()
-    if any(marker in raw for marker in MENU_MARKERS):
+    if any(marker in raw for marker in MENU_MARKERS) or is_replay_frame(raw):
         return False
     folded = _fold(raw)
     return "SCORED" in folded and not any(_fold(n) in folded for n in player_names if n)
