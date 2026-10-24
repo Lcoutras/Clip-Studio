@@ -16,3 +16,4 @@ fonts/*.otf
 settings.yaml
 config.old.yaml
 tools/
+agent/.claude/settings.local.json

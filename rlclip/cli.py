@@ -2,7 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import config, detect, ffmpeg, pipeline
+from . import agent, config, detect, ffmpeg, pipeline
 
 
 def _formats(cfg, override):
@@ -87,6 +87,8 @@ def main(argv=None):
     p.add_argument("video")
     p.add_argument("--at", required=True, help="timestamp of a popup, e.g. 12:34")
 
+    agent.add_parser(sub)
+
     args = parser.parse_args(argv)
     cfg = config.load(args.config)
     try:
@@ -97,6 +99,8 @@ def main(argv=None):
             return cmd_run(args, cfg, render_too=False)
         if args.command == "render":
             return cmd_render(args, cfg)
+        if args.command == "agent":
+            return agent.run(cfg, args)
         if args.command in ("studio", "app"):
             from . import desktop
             desktop.main(cfg, windowed=args.command == "studio")

@@ -61,6 +61,13 @@ DEFAULTS = {
         "dirs": [],
         "files": [],
     },
+    # The Clip Agent (see agent/README.md) looks for new recordings here, including subfolders
+    # such as NVIDIA's "Videos\Rocket League". Short or old files are ignored.
+    "agent": {
+        "watch_dirs": ["~/Videos"],
+        "min_minutes": 2,
+        "max_age_days": 14,
+    },
     # In-app updates come from this public GitHub repository.
     "update": {
         "repo": "lcoutras/clip-studio",

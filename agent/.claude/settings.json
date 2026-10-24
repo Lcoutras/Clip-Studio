@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(../.venv/Scripts/python.exe tool.py:*)",
+      "Read(../output/**)",
+      "Read(../docs/**)",
+      "Read(../captions/**)",
+      "Edit(../output/agent/**)",
+      "WebSearch",
+      "WebFetch"
+    ],
+    "deny": [
+      "Edit(../rlclip/**)",
+      "Edit(../settings.yaml)"
+    ],
+    "additionalDirectories": ["../output", "../docs", "../captions"]
+  }
+}

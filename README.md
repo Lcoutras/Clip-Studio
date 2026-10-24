@@ -67,6 +67,10 @@ Exports go to `output\<recording name>\vertical\`. Highlight videos go to `outpu
 
 MKV recordings can be analyzed and exported, but they can't be previewed in the player. Use OBS **File → Remux Recordings** to make an MP4.
 
+## Clip Agent (optional)
+
+**`Clip Agent.bat`** opens Claude Code as your clip manager. It finds new recordings, picks the clips worth posting, writes TikTok, YouTube Shorts and Instagram captions, and fills `output\ready\` with clips ready to upload. It runs on your Claude subscription (no API bill) and never posts anything itself. Setup and details are in [agent/README.md](agent/README.md).
+
 ## Rocket League replays (recommended)
 
 Save the replay after each match you record: on the end-of-match screen choose **Save Replay**. Rocket League puts replays in `Documents\My Games\Rocket League\TAGame\Demos` (Steam) or `DemosEpic` (Epic Games). Clip Studio looks in both automatically, even when Documents is in OneDrive. You can also import `.replay` files with **Import**.
