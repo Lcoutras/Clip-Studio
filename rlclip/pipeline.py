@@ -330,8 +330,15 @@ class Project:
         track = self.cfg["audio"]["game_track"] if info.audio_tracks > 1 else 0
         peaks = detect.audio_peaks(self.video, track, det["audio_peak_db"]) if info.audio_tracks else []
         print(f"  audio: {len(peaks)} loud moments")
+        if info.duration < 180 and det["ocr_fps"] < 1:
+            det = {**det, "ocr_fps": 1.0}   # a short clip: Fast saves seconds and can miss a popup
         timeline = []
         ocr = detect.ocr_events(info, det, on_progress=on_progress, timeline=timeline)
+        if det["ocr_fps"] < 1 and peaks:
+            extra = detect.recheck_loud_moments(info, det, peaks, ocr)
+            if extra:
+                print(f"  fast mode: {len(extra)} popups found by re-checking loud moments")
+            ocr = sorted(ocr + extra, key=lambda e: e.time)
         is_gameplay = detect.gameplay_checker(timeline)
         warnings = self.audio_warnings(track)
         scoreboard_note = [] if is_gameplay.scoreboard_seen or not det.get("reactions_alone") else [

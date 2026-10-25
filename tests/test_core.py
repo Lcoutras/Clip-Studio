@@ -251,3 +251,18 @@ def test_every_save_is_a_clip():
     found = highlights.build(saves, [], [], det, 600)
     assert [h.category for h in found] == ["Save", "Epic Save"]
     assert detect.classify_frame("SAVE +50".split(" "), ["postmates85"]) == [("SAVE", False)]
+
+
+def test_fast_mode_rechecks_loud_moments_it_missed():
+    """Fast mode (a look every 2 s) missed a goal popup on a 30 s clip that Standard caught."""
+    det = {**config.load()["detection"], "player_names": ["postmates85"]}
+    info = SimpleNamespace(duration=30.0)
+    looked = []
+
+    def read(at):   # the popup is readable from 15.6 s to 16.8 s, between two fast looks
+        looked.append(at)
+        return [("GOAL", 0.9), ("+100", 0.9)] if 15.6 <= at <= 16.8 else []
+    found = detect.recheck_loud_moments(info, det, [(14.8, 22.0), (25.0, 9.0)], [], read=read)
+    assert [e.label for e in found] == ["GOAL"] and all(at > 14.8 for at in looked[:3])
+    already = [detect.Event(15.0, "GOAL", 7, "hype", "ocr")]
+    assert detect.recheck_loud_moments(info, det, [(14.8, 22.0)], already, read=read) == []

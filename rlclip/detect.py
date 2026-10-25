@@ -302,19 +302,7 @@ def ocr_events(info, det, progress=True, on_progress=None, timeline=None):
             timeline.append((t, motion, scoreboard_visible(strip)))
         prev_thumb, prev_lines = thumb, lines
         texts = [text for text, conf in lines if conf >= det["ocr_min_confidence"]]
-        for kw, mine in classify_frame(texts, names):
-            # A popup stays on screen for a few seconds: only count its first appearance.
-            if t - last_seen.get(kw, -99) < 4:
-                last_seen[kw] = t
-                continue
-            last_seen[kw] = t
-            label, weight, mood = EVENTS[kw]
-            if mine and "GOAL" in kw:
-                weight += 2
-            events.append(Event(max(0.0, t - det["ocr_delay"]), label, weight, mood, "ocr", " ".join(texts)))
-        if other_scorer(texts, names) and t - last_seen.get("OTHER", -99) >= 8:
-            last_seen["OTHER"] = t
-            events.append(Event(max(0.0, t - det["ocr_delay"]), "OTHER GOAL", 5, "hype", "ocr", " ".join(texts)))
+        events += _frame_events(texts, names, t, det, last_seen)
         if on_progress and i % max(1, int(10 * fps)) == 0:
             try:
                 on_progress(min(100.0, 100 * t / info.duration), len(events))
@@ -332,6 +320,47 @@ def ocr_events(info, det, progress=True, on_progress=None, timeline=None):
         sys.stdout.write(f"\r  scanning video... 100.0%  ({len(events)} events, "
                          f"{skipped} unchanged frames skipped)\n")
     return events
+
+
+def _frame_events(texts, names, t, det, last_seen):
+    """Events for the popups in one frame's text (each popup counted once while it's on screen)."""
+    found = []
+    for kw, mine in classify_frame(texts, names):
+        # A popup stays on screen for a few seconds: only count its first appearance.
+        if t - last_seen.get(kw, -99) < 4:
+            last_seen[kw] = t
+            continue
+        last_seen[kw] = t
+        label, weight, mood = EVENTS[kw]
+        if mine and "GOAL" in kw:
+            weight += 2
+        found.append(Event(max(0.0, t - det["ocr_delay"]), label, weight, mood, "ocr", " ".join(texts)))
+    if other_scorer(texts, names) and t - last_seen.get("OTHER", -99) >= 8:
+        last_seen["OTHER"] = t
+        found.append(Event(max(0.0, t - det["ocr_delay"]), "OTHER GOAL", 5, "hype", "ocr", " ".join(texts)))
+    return found
+
+
+def recheck_loud_moments(info, det, peaks, events, max_moments=40, read=None):
+    """Fast mode looks every 2 s, so a popup (on screen ~1-2 s) can slip between two looks.
+    Popups follow a loud game moment (explosion, big hit, demo): look closely after the loudest
+    ones the quick pass didn't already explain."""
+    read = read or (lambda at: ocr_frame(info, det, at)[1])
+    names = det.get("player_names") or []
+    covered = [e.time for e in events]
+    loud = sorted((p for p in peaks if all(abs(p[0] - c) > 4 for c in covered)), key=lambda p: -p[1])
+    found, last_seen = [], {}
+    for t0, _ in loud[:max_moments]:
+        for dt in (0.4, 0.9, 1.4, 1.9, 2.5):
+            t = t0 + dt
+            if t > info.duration:
+                break
+            texts = [text for text, conf in read(t) if conf >= det["ocr_min_confidence"]]
+            new = _frame_events(texts, names, t, det, last_seen)
+            if new:
+                found += new
+                break
+    return found
 
 
 def ocr_frame(info, det, at):

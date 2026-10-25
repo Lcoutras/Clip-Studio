@@ -58,7 +58,7 @@ Open **Clip Studio** from the shortcut that `setup.bat` puts on your desktop, or
 
 **What Clip Studio learned** (under the clip list) shows the current rules and has **Forget everything**. **Save feedback report** writes `output\feedback_report.txt`. Share it with Claude to improve the built-in defaults for future versions.
 
-**Analysis speed:** the menu next to **Analyze** offers **Standard** (checks the screen every second) and **Fast** (every 2 seconds, about twice as quick; a popup shown for under 2 seconds can be missed). Either way, stretches where the screen doesn't change (menus, loading screens, pauses) are skipped automatically.
+**Analysis speed:** the menu next to **Analyze** offers **Standard** (checks the screen every second) and **Fast** (every 2 seconds, about twice as quick). Fast then re-checks the screen closely after every loud game moment it didn't explain, so popups that slipped between two looks are still found. Recordings under 3 minutes always use Standard. Either way, stretches where the screen doesn't change (menus, loading screens, pauses) are skipped automatically.
 
 **Cancel and remove:** the **Cancel** button next to the status meter stops the running task. In the task list (click the status meter), every waiting or running task has its own Cancel/Remove button. **Remove** next to Analyze takes a recording off the list. Your video file and any exported clips stay on your PC. Cancelling a re-analysis keeps the previous results.
 
