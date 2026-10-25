@@ -53,6 +53,34 @@ def test_uploads_new_vertical_clips_once_within_daily_limit(cfg, monkeypatch):
     assert "Daily limit reached" in messages[-1]
 
 
+def test_uploaded_clips_move_out_of_exports_and_are_never_resent(cfg, tmp_path, monkeypatch):
+    out = tmp_path / "out"
+    day = out / "Exports" / "2026-10-25"
+    for i, mp4 in enumerate(sorted(day.glob("*.mp4"))):
+        mp4.with_suffix(".json").write_text(json.dumps({"description": "d", "recording": "game.mp4", "clip": i}))
+    monkeypatch.setattr(tiktok, "_post", lambda *a, **k: {"data": {"publish_id": "p", "upload_url": "https://upload.example/u"}})
+
+    class Res:
+        def read(self):
+            return b""
+    monkeypatch.setattr(tiktok.urllib.request, "urlopen", lambda req, timeout=0: Res())
+    cfg["tiktok"]["max_per_day"] = 10
+    assert tiktok.upload_new(cfg, say=lambda m: None) == 3
+    left = sorted(p.name for p in day.glob("*.mp4"))
+    assert left and all("Highlights" in n or "horizontal" in n for n in left)   # only the skipped kinds remain
+    moved = sorted(p.name for p in (out / "Uploaded" / "2026-10-25").glob("*"))
+    assert len([n for n in moved if n.endswith(".mp4")]) == 3 and any(n.endswith(".json") for n in moved)
+    # The same play exported again later is not uploaded twice.
+    again = day / "Goal - New caption (Oct 22 6.25 PM #1).mp4"
+    again.write_bytes(b"v")
+    uploaded_goal = json.loads(next((out / "Uploaded" / "2026-10-25").glob("Goal*.json")).read_text())
+    again.with_suffix(".json").write_text(json.dumps({"description": "d2", "recording": "game.mp4",
+                                                      "clip": uploaded_goal["clip"]}))
+    said = []
+    assert tiktok.upload_new(cfg, say=said.append) == 0
+    assert any("uploaded before" in m for m in said)
+
+
 def test_needs_app_keys(tmp_path):
     c = config.load()
     c["output_dir"] = str(tmp_path)

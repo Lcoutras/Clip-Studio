@@ -41,7 +41,9 @@ To start it with Windows: press Win+R, type `shell:startup`, and put a shortcut 
 ## What gets uploaded
 - Every vertical clip in `output\Exports\<date>\`. Highlight compilations and `[horizontal]` versions are skipped.
 - The description and hashtags from the clip's `.json` / `.txt`, written by Clip Studio when you export.
-- What was sent and when is listed in `output\tiktok\uploaded.json`. Delete a line there to send that clip again.
+- **Once a clip is sent, it moves out of `Exports` into `output\Uploaded\<date>\`** (with its `.txt` and `.json`), so `Exports` only ever holds clips still waiting. Clip Studio knows where it went: **Watch export** still works.
+- A play is never sent twice. If you export the same clip again (say with a new caption), the uploader skips it and says so.
+- What was sent and when is listed in `output\tiktok\uploaded.json`. To send a clip again, delete its line there and move its files back into `Exports`.
 
 ## Stopping for good
 Close the uploader, delete `output\tiktok\`, remove Clip Studio under TikTok → Settings → Security → Manage app permissions, and delete the app in the developer portal.

@@ -162,13 +162,74 @@ def description(clip, extra_tags=()):
     return (" ".join(words) + "\n\n" + " ".join(tags)).strip()[:MAX_DESCRIPTION]
 
 
+UPLOADED = "Uploaded"   # clips move here (output/Uploaded/<date>/) once TikTok has them
+
+
+def _identity(clip):
+    """(recording, clip number) from the clip's .json: the same play exported twice is one clip."""
+    try:
+        meta = json.loads(Path(clip).with_suffix(".json").read_text(encoding="utf-8"))
+        return f"{meta['recording']}#{meta['clip']}"
+    except (OSError, ValueError, KeyError):
+        return None
+
+
 def pending(cfg, done):
     """Vertical clips in output/Exports not uploaded yet, oldest first. Highlight compilations
-    and horizontal versions are skipped."""
+    and horizontal versions are skipped, and so is a play that was already uploaded (even if it
+    was exported again)."""
     root = config.resolve(cfg["output_dir"]) / pipeline.EXPORTS
+    sent = {v.get("clip_id") for v in done.values() if v.get("clip_id")}
     clips = [p for p in root.glob("*/*.mp4")
              if "[horizontal]" not in p.name and not p.name.startswith("Highlights")]
-    return sorted((p for p in clips if p.relative_to(root).as_posix() not in done), key=lambda p: p.stat().st_mtime)
+    return sorted((p for p in clips if p.relative_to(root).as_posix() not in done and _identity(p) not in sent),
+                  key=lambda p: p.stat().st_mtime)
+
+
+def move_to_uploaded(cfg, clip):
+    """Move an uploaded clip (and its .txt/.json) out of Exports into Uploaded/<same date>/, and
+    point Clip Studio at its new place so it isn't exported (or uploaded) again."""
+    out_root = config.resolve(cfg["output_dir"])
+    dest_dir = out_root / UPLOADED / clip.parent.name
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    old_rel = clip.relative_to(out_root).as_posix()
+    for ext in (".mp4", ".txt", ".json"):
+        src = clip.with_suffix(ext)
+        if src.exists():
+            src.replace(dest_dir / src.name)
+    new = dest_dir / clip.name
+    _repoint_export(cfg, old_rel, new.relative_to(out_root).as_posix())
+    if clip.parent.exists():
+        pipeline.refresh_posts_csv(clip.parent, cfg)
+        if not any(clip.parent.glob("*.mp4")):
+            (clip.parent / "posts.csv").unlink(missing_ok=True)
+            try:
+                clip.parent.rmdir()
+            except OSError:
+                pass
+    return new
+
+
+def _repoint_export(cfg, old_rel, new_rel):
+    """Update the clip's row in its recording's captions sheet (the 'exports' column)."""
+    try:
+        settings_path = config.resolve(cfg["output_dir"]) / "app_settings.json"
+        library = json.loads(settings_path.read_text(encoding="utf-8")).get("library", [])
+    except (OSError, ValueError):
+        return
+    for video in library:
+        proj = pipeline.Project(video, cfg)
+        if not proj.csv_path.exists():
+            continue
+        rows = proj.read_rows()
+        hit = False
+        for r in rows:
+            if old_rel in (r.get("exports") or ""):
+                r["exports"] = r["exports"].replace(old_rel, new_rel)
+                hit = True
+        if hit:
+            proj.write_rows(rows)
+            return
 
 
 def _log_path(cfg):
@@ -223,7 +284,21 @@ def upload_new(cfg, limit=None, say=print):
     room = max(0, int(s["max_per_day"]) - sent_today)
     if limit is not None:
         room = min(room, limit)
+    root = config.resolve(cfg["output_dir"]) / pipeline.EXPORTS
+    for key in list(log):   # uploaded by an older version, before clips moved to Uploaded
+        old = root / key
+        if old.exists():
+            try:
+                move_to_uploaded(cfg, old)
+            except OSError:
+                pass
     todo = pending(cfg, log)
+    sent_ids = {v.get("clip_id") for v in log.values() if v.get("clip_id")}
+    again = [p for p in root.glob("*/*.mp4") if _identity(p) in sent_ids]
+    if again:
+        say(f"Skipping {len(again)} clip(s) in Exports that were uploaded before (exported again): "
+            + ", ".join(p.name for p in again[:3]) + ("..." if len(again) > 3 else "")
+            + ". To send one again, delete its line in output\\tiktok\\uploaded.json.")
     if not todo:
         say("Nothing new in the Exports folder.")
         return 0
@@ -231,7 +306,6 @@ def upload_new(cfg, limit=None, say=print):
         say(f"Daily limit reached ({s['max_per_day']}); {len(todo)} clips wait for tomorrow.")
         return 0
     token = access_token(cfg)
-    root = config.resolve(cfg["output_dir"]) / pipeline.EXPORTS
     sent = 0
     for clip in todo[:room]:
         say(f"Uploading {clip.name} ...")
@@ -243,8 +317,14 @@ def upload_new(cfg, limit=None, say=print):
                 break
             continue
         log[clip.relative_to(root).as_posix()] = {"at": time.strftime("%Y-%m-%d %H:%M"), "publish_id": pid,
-                                                  "mode": s["mode"], "description": description(clip, s["extra_tags"])}
+                                                  "mode": s["mode"], "clip_id": _identity(clip),
+                                                  "description": description(clip, s["extra_tags"])}
         _log_path(cfg).write_text(json.dumps(log, indent=1), encoding="utf-8")
+        try:
+            moved = move_to_uploaded(cfg, clip)
+            say(f"  moved to {moved.parent}")
+        except OSError as e:   # the file is open somewhere: it stays, the log still prevents a repeat
+            say(f"  uploaded, but couldn't move it out of Exports ({e})")
         sent += 1
         say("  sent to your TikTok inbox: open the TikTok notification to post it" if s["mode"] == "drafts"
             else "  posted (it can take a few minutes to show on your profile)")
