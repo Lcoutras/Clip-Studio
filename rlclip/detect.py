@@ -32,7 +32,7 @@ EVENTS = {
     "PLAYMAKER": ("PLAYMAKER", 6, "hype"),
     "GOAL": ("GOAL", 5, "hype"),
     "DEMOLITION": ("DEMO", 4, "funny"),
-    "SAVE": ("SAVE", 4, "chill"),
+    "SAVE": ("SAVE", 5.5, "hype"),   # every save of yours is a clip (the bar is min_score 5)
     "ASSIST": ("ASSIST", 6, "hype"),   # your pass set up a goal: a clip on its own
     "SHOT ON GOAL": ("SHOT", 1, "chill"),
     # Smaller plays: a clip when the game audio says it was a big hit (see highlights.MINOR).

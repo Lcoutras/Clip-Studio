@@ -241,3 +241,13 @@ def test_clears_and_centers_need_a_big_hit_and_are_capped():
     found = highlights.build(clears, hits, [], det, 600)
     assert 0 < len(found) <= round(600 / 600 * det["max_minor_per_10min"])
     assert {h.category for h in found} == {"Clear"}
+
+
+def test_every_save_is_a_clip():
+    """Saves scored 4 against a bar of 5, so plain saves were never suggested."""
+    det = config.load()["detection"]
+    saves = [detect.Event(100.0, *detect.EVENTS["SAVE"], "ocr", "SAVE +50"),
+             detect.Event(300.0, *detect.EVENTS["EPIC SAVE"], "ocr", "EPIC SAVE +75")]
+    found = highlights.build(saves, [], [], det, 600)
+    assert [h.category for h in found] == ["Save", "Epic Save"]
+    assert detect.classify_frame("SAVE +50".split(" "), ["postmates85"]) == [("SAVE", False)]

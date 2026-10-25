@@ -12,7 +12,7 @@ from pathlib import Path
 from . import captions, config, detect, feedback, ffmpeg, highlights, music, render, replay
 
 # Bump when detection changes enough that old results should be thrown away.
-DETECTION_VERSION = 10
+DETECTION_VERSION = 11
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",

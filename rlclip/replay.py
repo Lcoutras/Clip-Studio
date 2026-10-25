@@ -26,7 +26,7 @@ RRROCKET_RELEASES = "https://api.github.com/repos/nickbabcock/rrrocket/releases/
 STATS = {
     "TAGame.PRI_TA:MatchGoals": ("GOAL", 6),
     "TAGame.PRI_TA:MatchEpicSaves": ("EPIC SAVE", 8),
-    "TAGame.PRI_TA:MatchSaves": ("SAVE", 4),
+    "TAGame.PRI_TA:MatchSaves": ("SAVE", 5.5),
     "TAGame.PRI_TA:MatchAssists": ("ASSIST", 3),
     "TAGame.PRI_TA:MatchShots": ("SHOT", 1),
     "TAGame.PRI_TA:MatchAerialHits": ("AERIAL HIT", 2),
