@@ -381,6 +381,11 @@ class Project:
             # The replay knows exactly what happened in its match: drop screen-reading guesses there.
             ocr = [e for e in ocr if not any(a - 5 <= e.time <= b + 5 for a, b in spans)] + rep_events
             reactions = [(t, db) for t, db in reactions if any(a <= t <= b for a, b in spans) or is_gameplay(t)]
+        if info.height > info.width:
+            scoreboard_note.insert(0, "This is already a vertical (edited) video. Clip Studio reads raw game "
+                                      "recordings, where the popups are full size, so it may find little here. "
+                                      "Import the original recording instead, or use + Add moment here to "
+                                      "export this one as it is.")
         notes = scoreboard_note + notes
         for n in notes:
             print(f"  {n}")
