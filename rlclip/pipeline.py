@@ -12,7 +12,7 @@ from pathlib import Path
 from . import captions, config, detect, feedback, ffmpeg, highlights, music, render, replay
 
 # Bump when detection changes enough that old results should be thrown away.
-DETECTION_VERSION = 11
+DETECTION_VERSION = 12
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
@@ -246,6 +246,7 @@ class Project:
         Returns (events, notes for the user, [(start, end)] recording spans the replays cover).
         """
         rcfg = self.cfg.get("replays", {})
+        self._story_events = []   # 50/50s, post hits... (see replay.story_events), for story mode
         if not rcfg.get("enabled", True):
             return [], [], []
         info = self.info
@@ -283,6 +284,10 @@ class Project:
                 notes.append(f"Replay {rep.name or path.name} ({when}) didn't line up with this recording")
                 continue
             evs = replay.to_events(rep, offset, names, info.duration)
+            try:
+                self._story_events += replay.story_events(rep, offset, names, info.duration)
+            except Exception as e:   # older replays can lack some data: stories are a bonus
+                print(f"  story moments not read from {path.name}: {e}")
             if not evs:
                 continue
             events += evs
@@ -428,13 +433,26 @@ class Project:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         with open(self.highlights_path, "w", encoding="utf-8") as f:
             json.dump({"version": DETECTION_VERSION, "highlights": data, "warnings": warnings,
-                       "notes": notes}, f, indent=1)
+                       "notes": notes, "story_events": getattr(self, "_story_events", [])}, f, indent=1)
         for w in warnings:
             print(f"  ! {w}")
         print(f"  picked {len(data)} highlights")
         return data
 
     # ------------------------------------------------------------ step 2
+    def story_events(self, start=None, end=None):
+        """Story moments from replays (and the detector's own events) between start and end."""
+        try:
+            with open(self.highlights_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return []
+        events = list(data.get("story_events") or [])
+        events += [e for h in data.get("highlights", []) for e in h.get("events", [])]
+        if start is not None:
+            events = [e for e in events if start - 1 <= float(e.get("time", -1)) <= end]
+        return events
+
     def highlight_for(self, row):
         """The detector's original suggestion behind a clip (None for clips you added)."""
         if row.get("source") != "auto":
@@ -481,6 +499,24 @@ class Project:
             if near is not None and abs(float(near["anchor"]) - anchor) <= 3:
                 near.update(flag="yes", note=note)
         self._carry_flags = None
+        # Plays with a story in them (a lost 50/50, a post hit, a second chance... before the goal)
+        # get one drafted; it shows in Clip Studio and can be edited or cleared.
+        from . import story
+        lookback = float(self.cfg["detection"].get("story_lookback", 10))
+        for row in rows:
+            anchor, end = float(row["anchor"]), float(row["end"])
+            if row.get("category") not in story.STORY_CATEGORIES or row.get("label") in story.NOT_MINE:
+                continue
+            moments = sorted(float(e["time"]) for e in self.story_events(anchor - lookback, end)
+                             if e.get("label") in story.STORY_LABELS and anchor - lookback <= float(e["time"]) < anchor - 0.3)
+            if len(moments) >= 2:
+                # Start the clip just before the story does, so the whole build-up is in it.
+                row["start"] = f"{max(0.0, min(float(row['start']), moments[0] - 1.0)):.2f}"
+                start = float(row["start"])
+                drafted = story.suggest(row, self.story_events(start, end), [], seed_text=self.video.name)
+                row["story"] = json.dumps({"beats": drafted["beats"], "payoff": drafted["payoff"]})
+                if drafted["title"]:
+                    row.update(alt_caption=row.get("caption") or "", caption=drafted["title"])
         # Clips you rejected stay rejected when the recording is analyzed again.
         for key, rec in feedback.Feedback(feedback_path(self.cfg)).data["clips"].items():
             video, anchor = key.rsplit("|", 1)

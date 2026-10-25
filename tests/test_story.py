@@ -37,3 +37,18 @@ def test_story_times_are_made_relative_to_the_clip():
                                                     "payoff": "Took the scenic route."}
     assert pipeline.story_of({"story": ""}) is None
     assert pipeline.story_of({"story": json.dumps({"beats": [], "payoff": ""})}) is None
+
+
+def test_replay_story_moments():
+    from rlclip import replay
+    rep = replay.Replay(path="", name="", match_start_epoch=0, date="", players={"me": 0, "mate": 0, "opp": 1},
+                        score=(1, 0), duration=60, events=[replay.ReplayEvent(20.0, "GOAL", "me", 0, 7)])
+    rep.touches = [(10.0, "me"), (10.2, "opp"), (11.5, "opp"),      # a 50/50 the opponent won...
+                   (13.0, "me")]                                     # ...and you won it back
+    # The ball bounces off the crossbar at 17 s with no car near it, then sits on the line.
+    rep.ball_track = [(16.8, 0, 4900, 600, 0), (17.0, 100, 5050, 640, 0), (17.2, 150, 4950, 560, 0)]
+    rep.ball_track += [(18.0 + i * 0.2, 0, 4980 + i * 10, 93, 0) for i in range(10)]
+    rep.car_tracks = {"me": [(17.0, 0, 3000, 17)], "opp": [(17.0, 500, -2000, 17)]}
+    labels = [(e["label"], e["time"]) for e in replay.story_events(rep, 100.0, ["me"], 1000)]
+    assert ("LOST 50", 110.0) in labels and ("SECOND CHANCE", 113.0) in labels
+    assert ("CROSSBAR", 117.0) in labels and any(l == "HANGING" for l, _ in labels)

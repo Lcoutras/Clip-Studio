@@ -11,7 +11,13 @@ openers:          # first beat, when the clip starts before anything happens
 
 events:           # a beat for each thing the game shows during the build-up
   SHOT: ["First shot...", "Shot... saved?", "Tried it..."]
-  POST: ["POST.", "CROSSBAR.", "Off the bar..."]
+  POST: ["POST.", "Off the post..."]
+  CROSSBAR: ["CROSSBAR.", "Off the bar..."]
+  NEAR MISS: ["Just wide...", "So close...", "Inches..."]
+  HANGING: ["Just go in.", "Come on...", "Roll... roll..."]
+  LOST 50: ["Lost the 50...", "Lost the challenge..."]
+  WON 50: ["Won the 50.", "Mine."]
+  SECOND CHANCE: ["Got a second chance...", "Not over yet...", "Won it back..."]
   AERIAL HIT: ["Up we go...", "Took flight...", "Air time..."]
   BICYCLE HIT: ["Bicycle?!", "Wrong gear. Right idea."]
   CENTER: ["Center it...", "Pass..."]
@@ -24,6 +30,7 @@ events:           # a beat for each thing the game shows during the build-up
 payoffs:          # big yellow line from the play to the end
   Goal: ["And it's in.", "Called it.", "Too easy."]
   Goal after post: ["Took the scenic route.", "Third time's the charm."]
+  Goal comeback: ["Never gave up on it.", "Second chances hit different."]
   Aerial: ["From the sky.", "Gravity who?"]
   Save: ["Not today.", "Denied."]
   Epic Save: ["Not today.", "Denied."]
@@ -37,5 +44,6 @@ payoffs:          # big yellow line from the play to the end
 
 titles:           # the title (top line) for a pattern; otherwise the clip keeps its caption
   Goal after post: ["The net made me work for this one."]
+  Goal comeback: ["Lost the 50. Won the goal."]
   Aerial: ["Gravity was optional today."]
   Epic Save: ["They really thought they had it."]

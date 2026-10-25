@@ -58,6 +58,9 @@ class Replay:
     duration: float
     events: list = field(default_factory=list)
     stats: list = field(default_factory=list)
+    touches: list = field(default_factory=list)       # [(time, player name)] every ball touch
+    ball_track: list = field(default_factory=list)    # [(time, x, y, z, speed uu/s)]
+    car_tracks: dict = field(default_factory=dict)    # player name -> [(time, x, y, z)]
 
 
 # ---------------------------------------------------------------- rrrocket
@@ -119,6 +122,8 @@ def extract(data, path=""):
 
     names, counters, events = {}, {}, []
     balls, ball_track = set(), []           # (time, x, y, z) of the live ball
+    ball_full = []                          # (time, x, y, z, speed) for story detection
+    car_pri, car_track, touches = {}, {}, []
     for frame in frames:
         t = frame["time"] - t0
         for actor in frame.get("new_actors", []):
@@ -134,16 +139,33 @@ def extract(data, path=""):
                 names[aid] = attr.get("String", "")
             elif name == "Engine.PlayerReplicationInfo:Team":
                 names.setdefault(("team", aid), attr)
+            elif name == "Engine.Pawn:PlayerReplicationInfo":
+                car_pri[aid] = (attr.get("ActiveActor") or {}).get("actor")
+            elif name == "TAGame.PRI_TA:BallTouches" and "Int" in attr:
+                before = counters.get((aid, name), 0)
+                counters[(aid, name)] = attr["Int"]
+                if attr["Int"] > before:
+                    touches.append((t, aid))
             elif name in STATS and "Int" in attr:
                 value, before = attr["Int"], counters.get((aid, name), 0)
                 counters[(aid, name)] = value
                 if value > before:
                     label, weight = STATS[name]
                     events.append(ReplayEvent(t, label, aid, -1, weight))
-            elif name == "TAGame.RBActor_TA:ReplicatedRBState" and aid in balls:
-                loc = (attr.get("RigidBody") or {}).get("location")
-                if loc:
+            elif name == "TAGame.RBActor_TA:ReplicatedRBState":
+                rb = attr.get("RigidBody") or {}
+                loc = rb.get("location")
+                if not loc:
+                    continue
+                if aid in balls:
                     ball_track.append((t, loc["x"], loc["y"], loc["z"]))
+                    v = rb.get("linear_velocity") or {}
+                    # Velocities are stored in units/s x 100 by some replay versions; speed only
+                    # matters relative to itself here, so either scale works.
+                    sp = (v.get("x", 0) ** 2 + v.get("y", 0) ** 2 + v.get("z", 0) ** 2) ** 0.5 if v else 0.0
+                    ball_full.append((t, loc["x"], loc["y"], loc["z"], sp))
+                elif aid in car_pri:
+                    car_track.setdefault(aid, []).append((t, loc["x"], loc["y"], loc["z"]))
 
     teams = {p.get("Name"): p.get("Team", -1) for p in props.get("PlayerStats", [])}
     for e in events:
@@ -152,6 +174,12 @@ def extract(data, path=""):
         if e.label == "GOAL":
             e.speed_kph, e.height_uu = _ball_at(ball_track, e.time)
     events.sort(key=lambda e: e.time)
+    cars = {}
+    for car, track in car_track.items():
+        who = names.get(car_pri.get(car), "?")
+        cars.setdefault(who, []).extend(track)
+    for track in cars.values():
+        track.sort()
 
     return Replay(
         path=str(path), name=props.get("ReplayName", ""),
@@ -159,7 +187,8 @@ def extract(data, path=""):
         players=teams, score=(props.get("Team0Score", 0), props.get("Team1Score", 0)),
         duration=frames[-1]["time"] - t0, events=events,
         stats=[{k: p.get(k) for k in ("Name", "Team", "Goals", "Assists", "Saves", "Shots", "Score")}
-               for p in props.get("PlayerStats", [])])
+               for p in props.get("PlayerStats", [])],
+        touches=[(t, names.get(aid, "?")) for t, aid in touches], ball_track=ball_full, car_tracks=cars)
 
 
 def _ball_at(track, t, window=0.6):
@@ -380,3 +409,90 @@ def to_events(rep, offset, player_names, duration):
         mood = "funny" if e.label in ("POST", "DEMO") else "hype"
         events.append(Event(t, label, e.weight, mood, "replay", reason))
     return events
+
+
+# ---------------------------------------------------------------- story moments
+# Field geometry (Unreal units): goal lines at y = +-5120, posts at x = +-893, crossbar at z = 642.8,
+# ball radius 92.75.
+GOAL_Y, POST_X, BAR_Z = 5120.0, 893.0, 642.8
+
+
+def _near(track, t, window=0.12):
+    """The sample of a track nearest to time t (or None)."""
+    import bisect
+    if not track:
+        return None
+    i = bisect.bisect_left(track, (t,))
+    best = min((track[j] for j in (i - 1, i) if 0 <= j < len(track)), key=lambda p: abs(p[0] - t))
+    return best if abs(best[0] - t) <= window else None
+
+
+def story_events(rep, offset, player_names, duration):
+    """Moments that make a play a story, at recording times: [{"time", "label", "detail"}].
+    LOST 50 / WON 50 (you and an opponent hit it at once), SECOND CHANCE (you won it back),
+    POST / CROSSBAR (the ball hit the frame), NEAR MISS (just wide or over), HANGING (it sat on
+    the goal line before going in)."""
+    mine = {n.lower() for n in player_names}
+    team = rep.players
+    my_team = next((team[p] for p in team if p.lower() in mine), None)
+    out = []
+
+    def add(t, label, detail):
+        t += offset
+        if 0 <= t <= duration and all(not (e["label"] == label and abs(e["time"] - t) < 1.5) for e in out):
+            out.append({"time": round(t, 2), "label": label, "detail": detail})
+
+    # 50/50s and second chances, from the order of touches.
+    touches = sorted(rep.touches)
+    for i, (t, who) in enumerate(touches):
+        me = who.lower() in mine
+        other = [(t2, w2) for t2, w2 in touches[max(0, i - 2):i + 3]
+                 if abs(t2 - t) <= 0.45 and w2 != who and team.get(w2) != team.get(who)]
+        if me and other:
+            after = next((w for t2, w in touches[i + 1:] if t2 > t + 0.45), None)
+            if after is not None:
+                won = team.get(after) == my_team
+                add(t, "WON 50" if won else "LOST 50", f"50/50 with {other[0][1]}")
+        if me and i >= 2:
+            prev_t, prev_w = touches[i - 1]
+            had = [w for t2, w in touches[max(0, i - 6):i - 1] if t - t2 <= 5 and w.lower() in mine]
+            # The opponent really had it (not the other half of a 50/50), then you got it back.
+            if team.get(prev_w) != my_team and 0.45 < t - prev_t <= 3 and had:
+                add(t, "SECOND CHANCE", f"won it back from {prev_w}")
+
+    # Off the frame, just wide, hanging on the line: from the ball's path near each goal.
+    ball = rep.ball_track
+    car_tracks = list(rep.car_tracks.values())
+    for a, b, c in zip(ball, ball[1:], ball[2:]):
+        if abs(b[2]) < GOAL_Y - 260 or abs(b[2]) > GOAL_Y + 300:
+            continue
+        v1 = (b[1] - a[1], b[2] - a[2], b[3] - a[3])
+        v2 = (c[1] - b[1], c[2] - b[2], c[3] - b[3])
+        n1 = sum(x * x for x in v1) ** 0.5
+        n2 = sum(x * x for x in v2) ** 0.5
+        if n1 < 15 or n2 < 5:
+            continue
+        cos = sum(x * y for x, y in zip(v1, v2)) / (n1 * n2)
+        if cos > 0.5:
+            continue   # no bounce
+        if any((p := _near(track, b[0])) and ((p[1] - b[1]) ** 2 + (p[2] - b[2]) ** 2 + (p[3] - b[3]) ** 2) ** 0.5 < 320
+               for track in car_tracks):
+            continue   # a car hit it, not the frame
+        x, z = abs(b[1]), b[3]
+        if 790 <= x <= 1000 and z < BAR_Z + 60:
+            add(b[0], "POST", "the ball hit the post")
+        elif 540 <= z <= 760 and x < POST_X + 40:
+            add(b[0], "CROSSBAR", "the ball hit the crossbar")
+        elif (1000 < x < 1350 and z < 760) or (760 < z < 1000 and x < 1100):
+            add(b[0], "NEAR MISS", "just wide" if z < 760 else "just over")
+    for e in rep.events:
+        if e.label != "GOAL":
+            continue
+        slow = [p for p in ball if e.time - 2.5 <= p[0] <= e.time and abs(p[2]) > GOAL_Y - 450
+                and abs(p[1]) < POST_X and p[3] < BAR_Z]
+        if len(slow) >= 3:
+            dy = abs(slow[-1][2] - slow[0][2]) / max(0.05, slow[-1][0] - slow[0][0])
+            if slow[-1][0] - slow[0][0] >= 0.6 and dy < 900:
+                add(slow[0][0], "HANGING", "the ball sat on the goal line")
+    out.sort(key=lambda e: e["time"])
+    return out

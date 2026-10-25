@@ -416,6 +416,7 @@ function renderList() {
     $(".meta", li).textContent = `${fmtTime(c.anchor)} · ${(c.end - c.start).toFixed(0)}s`;
     $(".why", li).textContent = (all ? `${c.rec_label} \u00b7 ` : "") +
       (c.agent ? `\u{1F916} ${c.agent} \u00b7 ` : "") +
+      (hasStory(c) ? "\u{1F4D6} story \u00b7 " : "") +
       (c.skip && c.reject_reason ? `Rejected: ${(state.rejectReasons[c.reject_reason] || "").toLowerCase()} \u00b7 ` : "") +
       (c.flag && c.note ? `\u{1F6A9} ${c.note} \u00b7 ` : "") +
       (c.rendered ? "\u2713 exported \u00b7 " : "") + (c.reason || "");

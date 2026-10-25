@@ -15,6 +15,12 @@ from . import config, ffmpeg
 LIBRARY = "captions/story.yaml"
 CUSTOM = "captions/my_story.yaml"
 MAX_BEATS = 5
+# Moments that make a play a story (from replays: see replay.story_events), and the kinds of clips
+# that get a story drafted automatically when two or more of them lead up to the play.
+STORY_LABELS = {"LOST 50", "WON 50", "SECOND CHANCE", "POST", "CROSSBAR", "NEAR MISS", "HANGING", "SHOT"}
+STORY_CATEGORIES = {"Goal", "Assist", "Save", "Epic Save", "Aerial"}
+NEAR_MISSES = {"POST", "CROSSBAR", "NEAR MISS"}
+NOT_MINE = {"GOAL AGAINST", "OTHER GOAL"}   # no automatic stories for the other team's goals
 MIN_GAP = 1.2      # seconds between beats, so each one can be read
 
 
@@ -67,9 +73,14 @@ def suggest(row, events=(), hits=(), seed_text=""):
     category = {"Fail?": "Blooper/Fail"}.get(row.get("category"), row.get("category")) or "Goal"
     seed = zlib.crc32(f"{seed_text}|{row.get('clip')}".encode())
     used = set()
-    build = sorted((e for e in events if start <= float(e["time"]) < anchor - 0.4
-                    and e.get("label") in lib.get("events", {})), key=lambda e: float(e["time"]))
-    posts = sum(1 for e in build if e["label"] == "POST")
+    seen, build = set(), []
+    for e in sorted((e for e in events if start <= float(e["time"]) < anchor - 0.4
+                     and e.get("label") in lib.get("events", {})), key=lambda e: float(e["time"])):
+        key = (e["label"], round(float(e["time"])))
+        if key not in seen:   # the same moment can come from a popup and a replay
+            seen.add(key)
+            build.append(e)
+    posts = sum(1 for e in build if e["label"] in NEAR_MISSES)
     candidates = [(float(e["time"]), e["label"], 10.0) for e in build]
     for t, db in hits:   # loud hits the popups/replay don't already explain
         if start + 0.8 <= t < anchor - 0.6 and all(abs(t - c[0]) > 0.8 for c in candidates):
@@ -93,7 +104,9 @@ def suggest(row, events=(), hits=(), seed_text=""):
         if at < anchor - 0.3:
             beats.append({"at": round(at, 2), "text": _pick(lib["events"][label], seed + i + 1, used)})
     payoffs, titles = lib.get("payoffs", {}), lib.get("titles", {})
-    key = f"{category} after post" if posts and category == "Goal" else category
+    lost = any(e["label"] in ("LOST 50", "SECOND CHANCE") for e in build)
+    key = (f"{category} after post" if posts and category == "Goal"
+           else f"{category} comeback" if lost and category == "Goal" else category)
     payoff = _pick(payoffs.get(key) or payoffs.get(category) or payoffs.get("any"), seed, used)
     title = titles.get(key) or (titles.get("Aerial") if row.get("label") == "AERIAL GOAL" else None)
     return {"title": title[seed % len(title)] if title else "", "beats": beats, "payoff": payoff}

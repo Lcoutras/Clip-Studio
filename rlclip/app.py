@@ -555,8 +555,7 @@ class Studio:
         proj = self.project(name)
         row = next(r for r in proj.read_rows() if int(r["clip"]) == int(clip))
         start, end = float(row["start"]), float(row["end"])
-        events = [e for h in proj.load_highlights() or [] for e in h.get("events", [])
-                  if start - 1 <= float(e.get("time", -1)) <= end]
+        events = proj.story_events(start, end)
         info = proj.info
         track = self.cfg["audio"]["game_track"] if info.audio_tracks > 1 else 0
         hits = story.game_hits(proj.video, track, start, float(row["anchor"])) if info.audio_tracks else []
