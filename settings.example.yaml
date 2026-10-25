@@ -60,3 +60,13 @@ render:
   encoder: libx264            # h264_nvenc for NVIDIA GPUs (much faster), h264_amf for AMD
   crf: 20                     # quality: lower = better and bigger
   keep_raw_clip: true         # also save the unedited play (voices removed) in raw/
+
+# Upload exports to TikTok (TikTok Uploader.bat). Setup: docs/tiktok-setup.md
+# tiktok:
+#   client_key: ""
+#   client_secret: ""
+#   mode: drafts            # drafts (finish in the TikTok app) or direct
+#   privacy: PUBLIC_TO_EVERYONE
+#   max_per_day: 5
+#   watch_minutes: 10
+#   extra_tags: ["#fyp"]

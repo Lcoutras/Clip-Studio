@@ -1,0 +1,84 @@
+"""TikTok uploader, with TikTok's API faked."""
+
+import json
+import time
+
+import pytest
+
+from rlclip import config, tiktok
+
+
+@pytest.fixture
+def cfg(tmp_path):
+    c = config.load()
+    c["output_dir"] = str(tmp_path / "out")
+    c["tiktok"] = {"client_key": "k", "client_secret": "s", "max_per_day": 2}
+    day = tmp_path / "out" / "Exports" / "2026-10-25"
+    day.mkdir(parents=True)
+    for i, name in enumerate(["Goal - Called it (Oct 22 6.25 PM #1)", "Save - Not today (Oct 22 6.25 PM #2)",
+                              "Clear - Return to sender (Oct 22 6.25 PM #3)", "Highlights - 8.15 PM",
+                              "Goal - Called it (Oct 22 6.25 PM #1) [horizontal]"]):
+        (day / f"{name}.mp4").write_bytes(b"v" * 100)
+        (day / f"{name}.txt").write_text(f"{name.split(' (')[0]} | Rocket League\n\n#rocketleague #gaming #shorts\n")
+    tiktok._state_dir(c).joinpath("login.json").write_text(json.dumps(
+        {"access_token": "t", "expires_at": time.time() + 3600, "refresh_expires_at": time.time() + 9e6}))
+    return c
+
+
+def test_description_swaps_shorts_for_tiktok_tags(cfg, tmp_path):
+    clip = next((tmp_path / "out" / "Exports" / "2026-10-25").glob("Goal*#1).mp4"))
+    d = tiktok.description(clip, ["#fyp"])
+    assert d == "Goal - Called it | Rocket League\n\n#rocketleague #gaming #fyp"
+
+
+def test_uploads_new_vertical_clips_once_within_daily_limit(cfg, monkeypatch):
+    calls = []
+
+    def fake_post(url, data=None, token=None, form=False):
+        calls.append(url.rsplit("/v2/", 1)[1])
+        return {"data": {"publish_id": f"p{len(calls)}", "upload_url": "https://upload.example/x"}}
+
+    class Res:
+        def read(self):
+            return b""
+    monkeypatch.setattr(tiktok, "_post", fake_post)
+    monkeypatch.setattr(tiktok.urllib.request, "urlopen", lambda req, timeout=0: Res())
+    messages = []
+    assert tiktok.upload_new(cfg, say=messages.append) == 2          # daily limit 2
+    assert calls == ["post/publish/inbox/video/init/"] * 2            # drafts mode by default
+    log = tiktok.load_log(cfg)
+    assert len(log) == 2 and not any("Highlights" in k or "horizontal" in k for k in log)
+    assert "1 more waiting" in messages[-1]
+    assert tiktok.upload_new(cfg, say=messages.append) == 0          # nothing twice; limit reached today
+    assert "Daily limit reached" in messages[-1]
+
+
+def test_needs_app_keys(tmp_path):
+    c = config.load()
+    c["output_dir"] = str(tmp_path)
+    with pytest.raises(tiktok.TikTokError):
+        tiktok.upload_new(c)
+
+
+def test_connect_catches_the_sign_in_code(tmp_path, monkeypatch):
+    import threading
+    import urllib.parse
+    import urllib.request
+    c = config.load()
+    c["output_dir"] = str(tmp_path)
+    c["tiktok"] = {"client_key": "k", "client_secret": "s"}
+    seen = {}
+    monkeypatch.setattr(tiktok, "_post", lambda url, data=None, token=None, form=False: seen.update(data) or
+                        {"access_token": "a", "refresh_token": "r", "expires_in": 86400,
+                         "refresh_expires_in": 31536000, "scope": "user.info.basic,video.upload"})
+
+    def browser(url):   # what tiktok-callback.html does after TikTok sends the user back
+        state = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["state"][0]
+        port = state.split(".")[0]
+        def go():
+            time.sleep(0.3)
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/callback?code=abc&state={urllib.parse.quote(state)}").read()
+        threading.Thread(target=go).start()
+    tiktok.connect(c, open_browser=browser)
+    assert seen["code"] == "abc" and seen["grant_type"] == "authorization_code"
+    assert tiktok.access_token(c) == "a"

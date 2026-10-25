@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Clip Studio: TikTok sign-in</title>
+<p>Finishing sign-in&hellip;</p>
+<script>
+  // TikTok sends you here after you sign in; hand the code to Clip Studio on your own PC.
+  var q = new URLSearchParams(location.search);
+  var port = (q.get("state") || "").split(".")[0];
+  if (/^\d{2,5}$/.test(port)) location.replace("http://127.0.0.1:" + port + "/callback" + location.search);
+  else document.body.textContent = "Sign-in link is incomplete. Start again from Clip Studio.";
+</script>

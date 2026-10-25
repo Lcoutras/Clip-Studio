@@ -88,6 +88,11 @@ def main(argv=None):
     p.add_argument("--at", required=True, help="timestamp of a popup, e.g. 12:34")
 
     agent.add_parser(sub)
+    p = sub.add_parser("tiktok", help="upload exports to TikTok (see docs/tiktok-setup.md)")
+    p.add_argument("action", choices=["start", "connect", "upload"],
+                   help="start = sign in if needed, then keep uploading new exports")
+    p.add_argument("--watch", action="store_true", help="keep watching the Exports folder")
+    p.add_argument("--limit", type=int, help="upload at most this many now")
 
     args = parser.parse_args(argv)
     cfg = config.load(args.config)
@@ -101,6 +106,20 @@ def main(argv=None):
             return cmd_render(args, cfg)
         if args.command == "agent":
             return agent.run(cfg, args)
+        if args.command == "tiktok":
+            from . import tiktok
+            try:
+                if args.action == "connect" or (args.action == "start" and
+                                                not (config.resolve(cfg["output_dir"]) / "tiktok" / "login.json").exists()):
+                    tiktok.connect(cfg)
+                if args.action == "start" or args.watch:
+                    tiktok.watch(cfg)
+                elif args.action == "upload":
+                    tiktok.upload_new(cfg, limit=args.limit)
+            except tiktok.TikTokError as e:
+                print(f"\nTikTok: {e}")
+                return 1
+            return 0
         if args.command in ("studio", "app"):
             from . import desktop
             desktop.main(cfg, windowed=args.command == "studio")

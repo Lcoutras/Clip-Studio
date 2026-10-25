@@ -70,6 +70,10 @@ Exports go to **`output\Exports\<today's date>\`**, e.g. `output\Exports\2026-10
 
 MKV recordings can be analyzed and exported, but they can't be previewed in the player. Use OBS **File → Remux Recordings** to make an MP4.
 
+## Upload to TikTok automatically (optional)
+
+**`TikTok Uploader.bat`** watches `output\Exports\` and uploads each new clip to your TikTok with its caption and hashtags. It needs a free TikTok developer app; the 15-minute setup is in [docs/tiktok-setup.md](docs/tiktok-setup.md).
+
 ## Clip Agent (optional, temporary)
 
 **`Clip Agent.bat`** opens Claude Code as a first-line reviewer of Clip Studio's clips:
