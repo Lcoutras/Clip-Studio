@@ -117,3 +117,14 @@ def test_tiktok_refusals_are_explained():
     e = tiktok.TikTokError("spam_risk_too_many_pending_share: spam_risk_too_many_pending_share")
     assert "unfinished drafts" in tiktok.explain(e)
     assert tiktok.explain(tiktok.TikTokError("weird: thing")) == "failed: weird: thing"
+
+
+def test_status_report(cfg, monkeypatch):
+    tiktok._log_path(cfg).write_text(json.dumps({"2026-10-25/a.mp4": {"at": "2026-10-25 10:00", "publish_id": "p1"},
+                                                 "2026-10-25/b.mp4": {"at": "2026-10-25 10:01", "publish_id": "p2"}}))
+    answers = {"p1": {"status": "SEND_TO_USER_INBOX"}, "p2": {"status": "FAILED", "fail_reason": "file_format_check_failed"}}
+    monkeypatch.setattr(tiktok, "status", lambda token, pid: answers[pid])
+    lines = []
+    counts = tiktok.report_status(cfg, say=lines.append)
+    assert counts == {"SEND_TO_USER_INBOX": 1, "FAILED": 1}
+    assert "System notifications" in lines[0] and "file_format_check_failed" in lines[1]

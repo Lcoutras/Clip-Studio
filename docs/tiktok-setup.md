@@ -46,6 +46,9 @@ To start it with Windows: press Win+R, type `shell:startup`, and put a shortcut 
 - A play is never sent twice. If you export the same clip again (say with a new caption), the uploader skips it and says so.
 - What was sent and when is listed in `output\tiktok\uploaded.json`. To send a clip again, delete its line there and move its files back into `Exports`.
 
+## Finding the drafts on your phone
+Each upload arrives as a notification in the TikTok app: **Inbox** (bottom bar) → **System notifications**. Look for one from your app ("RL Clip Studio"), tap it, and post. Not sure where they went? Double-click **TikTok Status.bat**: it asks TikTok what happened to each clip (waiting in your inbox, posted, or failed and why).
+
 ## If TikTok says no
 - **"too many unfinished drafts in your TikTok inbox"** (`spam_risk_too_many_pending_share`): TikTok only allows a handful of drafts waiting at once. Post or delete the drafts in the TikTok app; the waiting clips go at the next check (or restart the uploader).
 - **"daily posting limit"**: TikTok's own cap; the rest go later. Nothing is lost or sent twice.

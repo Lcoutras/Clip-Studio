@@ -359,6 +359,36 @@ def upload_new(cfg, limit=None, say=print):
     return sent
 
 
+STATUS_WORDS = {
+    "SEND_TO_USER_INBOX": "waiting in your TikTok inbox: open TikTok > Inbox > System notifications and tap it to post",
+    "PUBLISH_COMPLETE": "posted",
+    "PROCESSING_UPLOAD": "still uploading",
+    "PROCESSING_DOWNLOAD": "still processing",
+    "FAILED": "failed",
+}
+
+
+def report_status(cfg, say=print):
+    """Ask TikTok what happened to each clip the uploader sent."""
+    log = load_log(cfg)
+    if not log:
+        say("Nothing has been sent to TikTok yet.")
+        return {}
+    token = access_token(cfg)
+    counts = {}
+    for name, entry in sorted(log.items(), key=lambda kv: kv[1].get("at", "")):
+        try:
+            data = status(token, entry["publish_id"])
+            state = data.get("status", "?")
+            extra = f" ({data['fail_reason']})" if data.get("fail_reason") else ""
+        except TikTokError as e:
+            state, extra = "UNKNOWN", f" ({e})"
+        counts[state] = counts.get(state, 0) + 1
+        say(f"{entry.get('at', '')}  {Path(name).name}\n    -> {STATUS_WORDS.get(state, state)}{extra}")
+    say("\nSummary: " + ", ".join(f"{n} {STATUS_WORDS.get(k, k).split(':')[0]}" for k, n in counts.items()))
+    return counts
+
+
 def watch(cfg, say=print):
     s = settings(cfg)
     every = float(s["watch_minutes"])
