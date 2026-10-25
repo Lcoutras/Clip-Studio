@@ -111,3 +111,9 @@ def test_connect_catches_the_sign_in_code(tmp_path, monkeypatch):
     tiktok.connect(c, open_browser=browser)
     assert seen["code"] == "abc" and seen["grant_type"] == "authorization_code"
     assert tiktok.access_token(c) == "a"
+
+
+def test_tiktok_refusals_are_explained():
+    e = tiktok.TikTokError("spam_risk_too_many_pending_share: spam_risk_too_many_pending_share")
+    assert "unfinished drafts" in tiktok.explain(e)
+    assert tiktok.explain(tiktok.TikTokError("weird: thing")) == "failed: weird: thing"

@@ -46,5 +46,9 @@ To start it with Windows: press Win+R, type `shell:startup`, and put a shortcut 
 - A play is never sent twice. If you export the same clip again (say with a new caption), the uploader skips it and says so.
 - What was sent and when is listed in `output\tiktok\uploaded.json`. To send a clip again, delete its line there and move its files back into `Exports`.
 
+## If TikTok says no
+- **"too many unfinished drafts in your TikTok inbox"** (`spam_risk_too_many_pending_share`): TikTok only allows a handful of drafts waiting at once. Post or delete the drafts in the TikTok app; the waiting clips go at the next check (or restart the uploader).
+- **"daily posting limit"**: TikTok's own cap; the rest go later. Nothing is lost or sent twice.
+
 ## Stopping for good
 Close the uploader, delete `output\tiktok\`, remove Clip Studio under TikTok → Settings → Security → Manage app permissions, and delete the app in the developer portal.

@@ -275,6 +275,29 @@ def status(token, publish_id):
     return _post(f"{API}/post/publish/status/fetch/", {"publish_id": publish_id}, token).get("data", {})
 
 
+# TikTok's refusals, in plain words.
+REASONS = {
+    "spam_risk_too_many_pending_share": "TikTok won't take more right now: there are too many unfinished drafts "
+        "in your TikTok inbox. Post or delete them in the TikTok app; the rest go at the next check.",
+    "spam_risk_too_many_posts": "TikTok's daily posting limit for this account is reached; the rest go at the "
+        "next check (or tomorrow).",
+    "spam_risk_user_banned_from_posting": "TikTok has paused posting on this account. Check the TikTok app.",
+    "rate_limit_exceeded": "Too many requests to TikTok in a short time; the rest go at the next check.",
+    "access_token_invalid": "The TikTok login is no longer valid: close this window, delete output\\tiktok\\login.json "
+        "and start TikTok Uploader.bat again to sign in.",
+    "scope_not_authorized": "The TikTok app isn't allowed to upload (video.upload): check its scopes in the "
+        "developer portal, then sign in again.",
+}
+
+
+def explain(error):
+    text = str(error)
+    for code, words in REASONS.items():
+        if code in text:
+            return words
+    return f"failed: {text}"
+
+
 def upload_new(cfg, limit=None, say=print):
     """Upload clips that haven't been uploaded, up to today's limit. Returns how many were sent."""
     s = settings(cfg)
@@ -314,7 +337,7 @@ def upload_new(cfg, limit=None, say=print):
         try:
             pid = upload_one(cfg, clip, token, s)
         except (TikTokError, urllib.error.URLError, OSError) as e:
-            say(f"  failed: {e}")
+            say("  " + explain(e))
             if "spam_risk" in str(e) or "rate_limit" in str(e):
                 break
             continue
