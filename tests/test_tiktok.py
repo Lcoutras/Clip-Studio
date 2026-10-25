@@ -49,7 +49,7 @@ def test_uploads_new_vertical_clips_once_within_daily_limit(cfg, monkeypatch):
     log = tiktok.load_log(cfg)
     assert len(log) == 2 and not any("Highlights" in k or "horizontal" in k for k in log)
     assert "1 more waiting" in messages[-1]
-    assert tiktok.settings(cfg)["max_per_run"] == 5 and tiktok.settings(cfg)["watch_minutes"] == 180
+    assert tiktok.settings(cfg)["max_per_run"] is None and tiktok.settings(cfg)["watch_minutes"] == 180
     assert tiktok.upload_new(cfg, say=messages.append) == 0          # nothing twice; limit reached today
     assert "Daily limit reached" in messages[-1]
 

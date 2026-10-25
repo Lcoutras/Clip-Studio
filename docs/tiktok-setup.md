@@ -1,6 +1,6 @@
 # Upload exports to TikTok automatically (private app)
 
-**TikTok Uploader.bat** checks `output\Exports\` every 3 hours and sends up to 5 each new vertical clip to your TikTok **as a draft**, with its description and hashtags. You open the TikTok notification and tap **Post**, and you can add a trending sound first. It remembers what it sent, so nothing goes twice.
+**TikTok Uploader.bat** checks `output\Exports\` every 3 hours and sends every new vertical clip to your TikTok **as a draft**, with its description and hashtags. You open the TikTok notification and tap **Post**, and you can add a trending sound first. It remembers what it sent, so nothing goes twice.
 
 It uses your own **private** TikTok developer app:
 - It's never submitted for review and never published.
@@ -31,10 +31,10 @@ tiktok:
   client_key: "sandbox client key"
   client_secret: "sandbox client secret"
 ```
-The defaults: drafts, a check every 3 hours, up to 5 clips per check. To change them, add `watch_minutes:` (e.g. `60` for hourly), `max_per_run:`, or a daily cap with `max_per_day:` (recommended if you ever switch to direct posting).
+The defaults: drafts, a check every 3 hours, no limit on how many clips it sends. To change them, add `watch_minutes:` (e.g. `60` for hourly), a per-check limit with `max_per_run:`, or a daily cap with `max_per_day:`. If TikTok itself says there are too many uploads, the uploader stops and tries again at the next check.
 
 ## 4. Run it
-Double-click **TikTok Uploader.bat**. The first time, your browser opens TikTok: sign in and allow access. It sends up to 5 new clips right away, then checks again every 3 hours. Leave the window open; close it to stop.
+Double-click **TikTok Uploader.bat**. The first time, your browser opens TikTok: sign in and allow access. It sends all new clips right away, then checks again every 3 hours. Leave the window open; close it to stop.
 
 To start it with Windows: press Win+R, type `shell:startup`, and put a shortcut to **TikTok Uploader.bat** in that folder.
 

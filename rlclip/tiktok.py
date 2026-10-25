@@ -45,7 +45,7 @@ def settings(cfg):
     if not t.get("client_key") or not t.get("client_secret"):
         raise TikTokError("Add your TikTok app's client_key and client_secret to settings.yaml first "
                           "(see docs/tiktok-setup.md).")
-    return {"mode": "drafts", "privacy": "PUBLIC_TO_EVERYONE", "max_per_run": 5, "max_per_day": None, "watch_minutes": 180,
+    return {"mode": "drafts", "privacy": "PUBLIC_TO_EVERYONE", "max_per_run": None, "max_per_day": None, "watch_minutes": 180,
             "redirect_uri": DEFAULT_REDIRECT, "extra_tags": ["#fyp"], **t}
 
 
@@ -341,7 +341,8 @@ def watch(cfg, say=print):
     every = float(s["watch_minutes"])
     say(f"Watching {config.resolve(cfg['output_dir']) / pipeline.EXPORTS} "
         f"{'once a day' if every == 1440 else f'every {every / 60:g} hours' if every % 60 == 0 else f'every {every:g} minutes'}"
-        f", up to {s['max_per_run']} clips each time. Close this window to stop.")
+        + (f", up to {s['max_per_run']} clips each time" if s.get("max_per_run") else ", sending everything new")
+        + ". Close this window to stop.")
     while True:
         try:
             upload_new(cfg, say=say)

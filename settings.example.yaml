@@ -67,7 +67,7 @@ render:
 #   client_secret: ""
 #   mode: drafts            # drafts (finish in the TikTok app) or direct
 #   privacy: PUBLIC_TO_EVERYONE
-#   max_per_run: 5            # clips per check
+#   max_per_run:              # optional limit per check (none by default)
 #   max_per_day:              # optional daily cap
 #   watch_minutes: 180        # every 3 hours
 #   extra_tags: ["#fyp"]
