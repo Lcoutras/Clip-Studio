@@ -68,7 +68,7 @@ render:
 #   mode: drafts            # drafts (finish in the TikTok app) or direct
 #   privacy: PUBLIC_TO_EVERYONE
 #   max_per_day: 5
-#   watch_minutes: 10
+#   watch_minutes: 1440       # once a day
 #   extra_tags: ["#fyp"]
 
 # Suggested post times written to posts.csv in each Exports\<date>\ folder (one per slot, starting

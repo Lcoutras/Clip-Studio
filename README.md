@@ -72,7 +72,7 @@ MKV recordings can be analyzed and exported, but they can't be previewed in the 
 
 ## Upload to TikTok automatically (optional)
 
-**`TikTok Uploader.bat`** watches `output\Exports\` and uploads each new clip to your TikTok with its caption and hashtags. It needs a free TikTok developer app; the 15-minute setup is in [docs/tiktok-setup.md](docs/tiktok-setup.md).
+**`TikTok Uploader.bat`** checks `output\Exports\` once a day and sends each new clip to your TikTok as a draft, with its description and hashtags. You tap Post in the TikTok app. It uses your own private TikTok developer app, which is never published; the setup is in [docs/tiktok-setup.md](docs/tiktok-setup.md).
 
 ## Clip Agent (optional, temporary)
 
