@@ -49,6 +49,8 @@ To start it with Windows: press Win+R, type `shell:startup`, and put a shortcut 
 ## Finding the drafts on your phone
 Each upload arrives as a notification in the TikTok app: **Inbox** (bottom bar) → **System notifications**. Look for one from your app ("RL Clip Studio"), tap it, and post. Not sure where they went? Double-click **TikTok Status.bat**: it asks TikTok what happened to each clip (waiting in your inbox, posted, or failed and why).
 
+**Don't delete the notification**: that only removes the alert, and the draft can't be reached any more. If it happened, double-click **TikTok Resend.bat**: it moves every clip that reached TikTok but was never posted back into the queue, and the uploader sends it again once TikTok accepts uploads.
+
 ## If TikTok says no
 - **"too many unfinished drafts in your TikTok inbox"** (`spam_risk_too_many_pending_share`): TikTok only allows a handful of drafts waiting at once. Post or delete the drafts in the TikTok app; the waiting clips go at the next check (or restart the uploader).
 - **"daily posting limit"**: TikTok's own cap; the rest go later. Nothing is lost or sent twice.

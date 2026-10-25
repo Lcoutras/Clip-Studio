@@ -389,6 +389,42 @@ def report_status(cfg, say=print):
     return counts
 
 
+def resend_unposted(cfg, say=print):
+    """Clips TikTok has but that were never posted (e.g. the notification was deleted): move them
+    back into Exports and forget they were sent, so the uploader sends them again."""
+    log = load_log(cfg)
+    if not log:
+        say("Nothing has been sent to TikTok yet.")
+        return 0
+    token = access_token(cfg)
+    out_root = config.resolve(cfg["output_dir"])
+    moved = 0
+    for name, entry in list(log.items()):
+        try:
+            state = status(token, entry["publish_id"]).get("status", "")
+        except TikTokError:
+            state = "UNKNOWN"
+        if state == "PUBLISH_COMPLETE":
+            continue
+        clip = out_root / UPLOADED / name
+        if not clip.exists():
+            say(f"  {Path(name).name}: not found in Uploaded, skipped")
+            continue
+        dest = out_root / pipeline.EXPORTS / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        for ext in (".mp4", ".txt", ".json"):
+            if clip.with_suffix(ext).exists():
+                clip.with_suffix(ext).replace(dest.with_suffix(ext))
+        _repoint_export(cfg, (Path(UPLOADED) / name).as_posix(), (Path(pipeline.EXPORTS) / name).as_posix())
+        pipeline.refresh_posts_csv(dest.parent, cfg)
+        del log[name]
+        moved += 1
+        say(f"  back in the queue: {Path(name).name}")
+    _log_path(cfg).write_text(json.dumps(log, indent=1), encoding="utf-8")
+    say(f"{moved} clip(s) will be sent again" + (" once TikTok accepts uploads again." if moved else "."))
+    return moved
+
+
 def watch(cfg, say=print):
     s = settings(cfg)
     every = float(s["watch_minutes"])

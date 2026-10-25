@@ -89,7 +89,7 @@ def main(argv=None):
 
     agent.add_parser(sub)
     p = sub.add_parser("tiktok", help="upload exports to TikTok (see docs/tiktok-setup.md)")
-    p.add_argument("action", choices=["start", "connect", "upload", "status"],
+    p.add_argument("action", choices=["start", "connect", "upload", "status", "resend"],
                    help="start = sign in if needed, then keep uploading new exports")
     p.add_argument("--watch", action="store_true", help="keep watching the Exports folder")
     p.add_argument("--limit", type=int, help="upload at most this many now")
@@ -118,6 +118,8 @@ def main(argv=None):
                     tiktok.upload_new(cfg, limit=args.limit)
                 elif args.action == "status":
                     tiktok.report_status(cfg)
+                elif args.action == "resend":
+                    tiktok.resend_unposted(cfg)
             except tiktok.TikTokError as e:
                 print(f"\nTikTok: {e}")
                 return 1

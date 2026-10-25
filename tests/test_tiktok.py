@@ -128,3 +128,18 @@ def test_status_report(cfg, monkeypatch):
     counts = tiktok.report_status(cfg, say=lines.append)
     assert counts == {"SEND_TO_USER_INBOX": 1, "FAILED": 1}
     assert "System notifications" in lines[0] and "file_format_check_failed" in lines[1]
+
+
+def test_resend_unposted_puts_clips_back_in_the_queue(cfg, tmp_path, monkeypatch):
+    out = tmp_path / "out"
+    up = out / "Uploaded" / "2026-10-25"
+    up.mkdir(parents=True)
+    for n in ("a", "b"):
+        (up / f"{n}.mp4").write_bytes(b"v")
+        (up / f"{n}.txt").write_text("d")
+    tiktok._log_path(cfg).write_text(json.dumps({"2026-10-25/a.mp4": {"publish_id": "p1"},
+                                                 "2026-10-25/b.mp4": {"publish_id": "p2"}}))
+    monkeypatch.setattr(tiktok, "status", lambda t, pid: {"status": "PUBLISH_COMPLETE" if pid == "p1" else "SEND_TO_USER_INBOX"})
+    assert tiktok.resend_unposted(cfg, say=lambda m: None) == 1
+    assert (out / "Exports" / "2026-10-25" / "b.mp4").exists() and (up / "a.mp4").exists()
+    assert list(tiktok.load_log(cfg)) == ["2026-10-25/a.mp4"]
