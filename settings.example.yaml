@@ -70,3 +70,8 @@ render:
 #   max_per_day: 5
 #   watch_minutes: 10
 #   extra_tags: ["#fyp"]
+
+# Suggested post times written to posts.csv in each Exports\<date>\ folder (one per slot, starting
+# the day after the export).
+# schedule:
+#   times: ["12:30", "19:30"]

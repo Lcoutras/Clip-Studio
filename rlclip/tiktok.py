@@ -145,7 +145,15 @@ def access_token(cfg):
 
 # ------------------------------------------------------------ what to upload
 def description(clip, extra_tags=()):
-    """The clip's .txt (caption | title, then hashtags), adapted for TikTok."""
+    """The clip's description from its .json (or .txt for older exports), adapted for TikTok."""
+    meta = Path(clip).with_suffix(".json")
+    if meta.exists():
+        try:
+            text = json.loads(meta.read_text(encoding="utf-8"))["description"]
+            extra = [t for t in extra_tags if t.lower() not in text.lower().split()]
+            return (text + (" " + " ".join(extra) if extra else "")).strip()[:MAX_DESCRIPTION]
+        except (ValueError, KeyError):
+            pass
     txt = Path(clip).with_suffix(".txt")
     text = txt.read_text(encoding="utf-8").strip() if txt.exists() else Path(clip).stem
     tags = [t for t in text.split() if t.startswith("#") and t.lower() != "#shorts"]

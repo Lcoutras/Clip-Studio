@@ -41,26 +41,90 @@ def recording_time(video):
     return datetime.datetime.fromtimestamp(start).strftime("%b %d %I.%M %p").replace(" 0", " ")
 
 
-HASHTAGS = {
-    "Goal": "#rocketleaguegoals", "Aerial": "#rocketleaguemechanics", "Save": "#rocketleaguesaves",
-    "Demo": "#rocketleaguedemo", "Assist": "#rocketleague3v3", "Post": "#rocketleaguefunny",
-    "Funny Moment": "#rocketleaguefunny", "Epic Save": "#rocketleaguesaves", "Clear": "#rocketleague3v3",
-    "Center": "#rocketleague3v3", "Blooper/Fail": "#rocketleaguefails",
-    "Fail?": "#rocketleaguefails", "Manual": "#rocketleagueclips",
+# How each kind of clip is described when posted: search words first (TikTok and YouTube are
+# searched like search engines), then a question that gets people commenting, then 5 hashtags.
+POSTS = {
+    "Goal": (["Rocket League goal", "Ranked Rocket League goal"],
+             ["Rate this goal 1-10 👇", "Would you have scored that?", "Clean or lucky? 👇"],
+             "#rocketleaguegoals"),
+    "Assist": (["Rocket League assist", "Rocket League teamwork"],
+               ["Pass of the game? 👇", "Who else passes like this?"], "#rocketleague3v3"),
+    "Save": (["Rocket League save", "Rocket League defense"],
+             ["Would you have saved that?", "Clutch or lucky? 👇"], "#rocketleaguesaves"),
+    "Epic Save": (["Rocket League epic save", "Clutch Rocket League save"],
+                  ["Would you have saved that?", "Save of the year? 👇"], "#rocketleaguesaves"),
+    "Clear": (["Rocket League clear", "Rocket League defense"],
+              ["Clutch or lucky? 👇", "Not in my net 🚫"], "#rocketleaguesaves"),
+    "Center": (["Rocket League pass", "Rocket League center"],
+               ["Who's finishing this? 👇", "Pass or shoot? 👇"], "#rocketleague3v3"),
+    "Aerial": (["Rocket League aerial", "Rocket League mechanics"],
+               ["How many hours to learn this? 👇", "Rate the air roll 1-10"], "#rocketleaguemechanics"),
+    "Demo": (["Rocket League demo", "Rocket League demolition"],
+             ["Deserved? 😂", "Bump or demo? 👇"], "#rocketleaguedemo"),
+    "Post": (["Rocket League post hit", "Rocket League so close"],
+             ["Post or goal next time? 😭", "Inches. INCHES. 😭"], "#rocketleaguefunny"),
+    "Blooper/Fail": (["Rocket League fail", "Rocket League blooper"],
+                     ["Be honest, would you have made it? 😂", "Tag the teammate who does this 😂"],
+                     "#rocketleaguefails"),
+    "Funny Moment": (["Rocket League funny moment", "Rocket League moment"],
+                     ["Thoughts? 👇", "Tag your duo 😂"], "#rocketleaguefunny"),
 }
+POST_DEFAULT = (["Rocket League clip"], ["Thoughts? 👇"], "#rocketleagueclips")
 
 
-def post_text(row):
-    """A title and hashtags to paste when posting. Search terms first: TikTok and YouTube
-    are searched like search engines (see docs/content-playbook.md)."""
-    category = row.get("category") or "Manual"
+def post_fields(row, video=""):
+    """Everything a scheduler needs to post a clip: the TikTok description (hashtags included),
+    the parts on their own, and a YouTube Shorts title. The wording is picked per clip but stays
+    the same when the clip is exported again."""
+    import zlib
+    category = {"Fail?": "Blooper/Fail"}.get(row.get("category"), row.get("category")) or "Manual"
+    hooks, questions, tag = POSTS.get(category, POST_DEFAULT)
+    pick = zlib.crc32(f"{Path(video).name}|{row.get('clip')}".encode())
+    hook, question = hooks[pick % len(hooks)], questions[(pick // 7) % len(questions)]
     caption = (row.get("caption") or "").strip()
-    title = f"{caption} | Rocket League {category.rstrip('?')}" if caption else f"Rocket League {category}"
-    if row.get("stat"):
-        title += f" ({row['stat'].lower()})"
-    tags = " ".join(["#rocketleague", HASHTAGS.get(category, "#rocketleagueclips"), "#rocketleagueclips",
-                     "#gaming", "#shorts"])
-    return f"{title}\n\n{tags}\n"
+    stat = f" ({row['stat'].lower()})" if row.get("stat") else ""
+    tags = ["#rocketleague", tag, "#rlclips", "#gaming", "#fyp"]
+    first = f"{caption} | {hook}{stat}" if caption else f"{hook}{stat}"
+    description = f"{first}\n{question}\n\n{' '.join(tags)}"
+    youtube = (f"{hook}: {caption}" if caption else hook)[:90] + " #shorts"
+    return {"description": description, "caption": caption, "hashtags": " ".join(tags),
+            "category": category, "youtube_title": youtube}
+
+
+def post_text(row, video=""):
+    return post_fields(row, video)["description"] + "\n"
+
+
+POSTS_CSV = ["file", "file_name", "description", "caption", "hashtags", "category", "recording",
+             "youtube_title", "suggested_time"]
+
+
+def refresh_posts_csv(day_dir, cfg):
+    """posts.csv in an export folder: one row per clip, for a scheduler's bulk upload. Rebuilt from
+    the clips' .json files, so re-exports and deleted clips are always reflected."""
+    day_dir = Path(day_dir)
+    items = []
+    for meta in sorted(day_dir.glob("*.json"), key=lambda p: p.stat().st_mtime):
+        mp4 = meta.with_suffix(".mp4")
+        if not mp4.exists():
+            continue
+        try:
+            items.append((mp4, json.loads(meta.read_text(encoding="utf-8"))))
+        except ValueError:
+            continue
+    # Suggested times: the slots in settings, starting the day after the export day.
+    times = (cfg.get("schedule") or {}).get("times") or ["12:30", "19:30"]
+    try:
+        day = datetime.date.fromisoformat(day_dir.name) + datetime.timedelta(days=1)
+    except ValueError:
+        day = datetime.date.today() + datetime.timedelta(days=1)
+    with open(day_dir / "posts.csv", "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=POSTS_CSV, extrasaction="ignore")
+        w.writeheader()
+        for i, (mp4, meta) in enumerate(items):
+            slot = day + datetime.timedelta(days=i // len(times))
+            w.writerow({**meta, "file": str(mp4), "file_name": mp4.name,
+                        "suggested_time": f"{slot.isoformat()} {times[i % len(times)]}"})
 
 
 def join_clips(parts, out, fps):
@@ -524,15 +588,21 @@ class Project:
                 previous = self.exported(row, layout)
                 render.render(cfg, video, game, anchor - start, layout, row["caption"], row["label"],
                               song, out, work, stat=row.get("stat") or "")
-                out.with_suffix(".txt").write_text(post_text(row), encoding="utf-8")
+                fields = post_fields(row, self.video)
+                out.with_suffix(".txt").write_text(fields["description"] + "\n", encoding="utf-8")
+                out.with_suffix(".json").write_text(json.dumps(
+                    {**fields, "recording": self.video.name, "clip": idx, "layout": layout}, indent=1,
+                    ensure_ascii=False), encoding="utf-8")
                 if previous and previous != out and previous.parent == today:
                     # Re-exported today with a new caption: replace today's older copy.
-                    previous.unlink(missing_ok=True)
-                    previous.with_suffix(".txt").unlink(missing_ok=True)
+                    for ext in (".mp4", ".txt", ".json"):
+                        previous.with_suffix(ext).unlink(missing_ok=True)
                 entries.append(f"{layout}={out.relative_to(self.out_root).as_posix()}")
                 made.append(out)
             exports[idx] = entries
         shutil.rmtree(self.out_dir / "work", ignore_errors=True)
+        if made:
+            refresh_posts_csv(exports_dir(self.cfg), self.cfg)
         if exports and self.csv_path.exists():
             saved = self.read_rows()
             for r in saved:
