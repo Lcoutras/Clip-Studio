@@ -515,7 +515,7 @@ class Studio:
         proj = self.project(name)
         rows = proj.read_rows()
         numeric = {"start", "end", "game_volume", "music_volume", "crop_x"}
-        allowed = numeric | {"caption", "alt_caption", "music", "skip", "tone", "framing", "category", "flag", "note",
+        allowed = numeric | {"caption", "alt_caption", "music", "skip", "tone", "framing", "category", "flag", "note", "story",
                              "reject_reason"}
         for row in rows:
             if int(row["clip"]) != clip:
@@ -523,6 +523,10 @@ class Studio:
             for key, value in fields.items():
                 if key not in allowed:
                     continue
+                if key == "story":
+                    value = json.dumps(value) if isinstance(value, dict) else (value or "")
+                    if value and pipeline.story_of({"story": value}) is None:
+                        value = ""   # an empty story: no beats and no payoff
                 if key == "category" and value in highlights.CATEGORIES:
                     row["label"] = highlights.label_for(value, row["label"])
                 if key in numeric:
@@ -544,6 +548,19 @@ class Studio:
 
     def add_manual(self, name, at):
         return self.project(name).add_manual(at)
+
+    def suggest_story(self, name, clip):
+        """Draft a story for a clip from what was detected in it (see story.py)."""
+        from . import story
+        proj = self.project(name)
+        row = next(r for r in proj.read_rows() if int(r["clip"]) == int(clip))
+        start, end = float(row["start"]), float(row["end"])
+        events = [e for h in proj.load_highlights() or [] for e in h.get("events", [])
+                  if start - 1 <= float(e.get("time", -1)) <= end]
+        info = proj.info
+        track = self.cfg["audio"]["game_track"] if info.audio_tracks > 1 else 0
+        hits = story.game_hits(proj.video, track, start, float(row["anchor"])) if info.audio_tracks else []
+        return story.suggest(row, events, hits, seed_text=proj.video.name)
 
     def suggest_caption(self, label, tone, category=None):
         picker = captions.CaptionPicker(self.cfg, self.out_root / ".captions_used.json")
@@ -699,6 +716,8 @@ def make_handler(studio):
                                                                             data["fields"])})
                 if path == "/api/add":
                     return self._json(studio.add_manual(data["video"], float(data["at"])))
+                if path == "/api/story/suggest":
+                    return self._json(studio.suggest_story(data["video"], int(data["clip"])))
                 if path == "/api/caption":
                     return self._json(studio.suggest_caption(data.get("label", ""), data.get("tone"),
                                                                data.get("category")))

@@ -69,7 +69,8 @@ def _rows(n):
 
 def _review(cfg, clip, **kw):
     base = {"recording": "game.mp4", "clip": clip, "approve": False, "reject": None, "flag": False, "note": None,
-            "caption": None, "tone": None, "music": None, "category": None, "start": None, "end": None}
+            "caption": None, "tone": None, "music": None, "category": None, "start": None, "end": None,
+            "story": None}
     return agent.cmd_review(cfg, type("A", (), {**base, **kw})())
 
 

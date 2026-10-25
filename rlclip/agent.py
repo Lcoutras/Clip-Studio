@@ -384,6 +384,20 @@ def cmd_review(cfg, args):
             if track is None:
                 raise SystemExit(f"No track called {choice!r} in the music folder (see 'music-list')")
             fields["music"] = track.name
+    if getattr(args, "story", None):
+        try:
+            story = json.loads(Path(args.story).read_text(encoding="utf-8") if Path(args.story).is_file() else args.story)
+            beats = [{"at": round(float(b["at"]), 2), "text": " ".join(str(b["text"]).split())}
+                     for b in story.get("beats", []) if str(b.get("text", "")).strip()]
+        except (ValueError, KeyError, TypeError, AttributeError):
+            raise SystemExit('--story must be JSON like {"beats": [{"at": 812.4, "text": "Lost the 50..."}], '
+                             '"payoff": "Took the scenic route."} (at = seconds into the recording)')
+        start, end = float(row["start"]), float(row["end"])
+        if any(not start <= b["at"] <= end for b in beats) or any(len(b["text"].split()) > 6 for b in beats):
+            raise SystemExit(f"Story beats must be inside the clip ({start:.1f}-{end:.1f}s) and at most 6 words")
+        fields["story"] = json.dumps({"beats": beats, "payoff": str(story.get("payoff") or "").strip()})
+        if story.get("title"):
+            fields.update(alt_caption=row.get("caption") or "", caption=" ".join(str(story["title"]).split()))
     if args.category:
         if args.category not in highlights.CATEGORIES:
             raise SystemExit(f"--category must be one of: {', '.join(highlights.CATEGORIES)}")
@@ -407,7 +421,7 @@ def cmd_review(cfg, args):
     return 0
 
 
-DECIDED = ["agent", "skip", "reject_reason", "flag", "caption", "tone", "music", "category", "start", "end"]
+DECIDED = ["agent", "skip", "reject_reason", "flag", "caption", "tone", "music", "category", "start", "end", "story"]
 
 
 def log_decision(cfg, proj, before, fields):
@@ -991,6 +1005,7 @@ def add_parser(sub):
     s.add_argument("--tone", help="funny or motivational")
     s.add_argument("--music", help="a track's file name, 'auto' or 'none'")
     s.add_argument("--category")
+    s.add_argument("--story", help='story JSON (or a file): {"title", "beats": [{"at": recording seconds, "text"}], "payoff"}')
     s.add_argument("--start", type=float, help="seconds into the recording")
     s.add_argument("--end", type=float)
     s = a.add_parser("caption-add", help="add a line to the caption library (captions/my_captions.yaml)")

@@ -70,6 +70,7 @@
       <div id="preview" class="preview" aria-hidden="true">
         <div class="pv-caption"></div>
         <div class="pv-stamp"></div>
+        <div class="pv-story"></div>
         <div class="pv-tag">Preview of the export's caption and stamp</div>
       </div>
     </div>
@@ -135,6 +136,15 @@
     <div class="caption-row">
       <textarea id="ed-caption" rows="2"></textarea>
       <button id="ed-shuffle" title="Another caption">&#127922;</button>
+    </div>
+
+    <h3 title="Lines that play out with the clip, like a mini story">Story <span class="muted small">(optional)</span></h3>
+    <div id="story-beats" class="story-beats"></div>
+    <input type="text" id="story-payoff" class="story-payoff" placeholder="Payoff: big line on the play, e.g. Took the scenic route.">
+    <div class="story-actions">
+      <button id="story-add" title="Add a line that appears at the playhead">&#43; Line at playhead</button>
+      <button id="story-suggest" title="Draft a story from what was detected in this clip">&#10024; Suggest story</button>
+      <button id="story-clear" class="link">Clear</button>
     </div>
 
     <h3>Music</h3>

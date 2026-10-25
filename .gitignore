@@ -19,3 +19,4 @@ tools/
 agent/.claude/settings.local.json
 captions/my_captions.yaml
 music/catalog.csv
+captions/my_story.yaml

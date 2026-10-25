@@ -458,7 +458,17 @@ function renderPreview() {
   $("#preview").hidden = !on || !c;
   if (!c) return;
   $(".pv-caption").textContent = (c.caption || "").toUpperCase();
-  const stamp = (state.noStamp || []).includes(c.label) ? "" : `${(state.stampText || {})[c.label] || c.label}!`;
+  $(".pv-caption").classList.toggle("story", hasStory(c));
+  const s = hasStory(c) ? storyOf(c) : null;
+  const now = state.playerVideo === c.video ? player.currentTime : -1;
+  let line = "", big = false;
+  if (s) {
+    if ((s.payoff || "").trim() && now >= c.anchor) { line = s.payoff; big = true; }
+    else line = ([...(s.beats || [])].sort((a, b) => a.at - b.at).filter(b => b.at <= now).pop() || {}).text || "";
+  }
+  $(".pv-story").textContent = (line || "").toUpperCase();
+  $(".pv-story").classList.toggle("big", big);
+  const stamp = s ? "" : (state.noStamp || []).includes(c.label) ? "" : `${(state.stampText || {})[c.label] || c.label}!`;
   const showStamp = stamp && Math.abs(player.currentTime - c.anchor) < 1.5 && state.playerVideo === c.video;
   $(".pv-stamp").textContent = stamp + (c.stat ? `\n${c.stat}` : "");
   $(".pv-stamp").classList.toggle("on", Boolean(showStamp));
@@ -466,10 +476,64 @@ function renderPreview() {
 $("#show-preview").onchange = ev => { store("showPreview", ev.target.checked); renderPreview(); };
 player.addEventListener("timeupdate", () => renderPreview());
 
+// ------------------------------------------------------------------ story mode
+const storyOf = c => { try { const s = JSON.parse(c.story || "null"); return s && typeof s === "object" ? s : null; } catch { return null; } };
+const hasStory = c => { const s = c && storyOf(c); return Boolean(s && ((s.beats || []).some(b => (b.text || "").trim()) || (s.payoff || "").trim())); };
+function saveStory(c, s) {
+  const empty = !(s.beats || []).some(b => (b.text || "").trim()) && !(s.payoff || "").trim();
+  save({ story: empty ? "" : JSON.stringify(s) }, c);
+  renderPreview();
+}
+function renderStory() {
+  const c = selClip();
+  if (!c) return;
+  const s = storyOf(c) || { beats: [], payoff: "" };
+  const box = $("#story-beats");
+  if (box.contains(document.activeElement)) return;   // don't rebuild while typing
+  box.innerHTML = "";
+  (s.beats || []).sort((a, b) => a.at - b.at).forEach((b, i) => {
+    const row = document.createElement("div");
+    row.className = "story-beat";
+    row.innerHTML = `<button class="at small" title="Jump here"></button><input type="text" class="txt"><button class="del small" title="Remove">&times;</button>`;
+    $(".at", row).textContent = fmtRel(b.at - c.anchor);
+    $(".at", row).onclick = () => { loadPlayer(c.video, b.at); player.pause(); };
+    $(".txt", row).value = b.text || "";
+    $(".txt", row).oninput = ev => { s.beats[i].text = ev.target.value; saveStory(c, s); };
+    $(".del", row).onclick = () => { s.beats.splice(i, 1); saveStory(c, s); renderStory(); };
+    box.appendChild(row);
+  });
+  if (document.activeElement !== $("#story-payoff")) $("#story-payoff").value = s.payoff || "";
+}
+$("#story-payoff").oninput = ev => { const c = selClip(); const s = storyOf(c) || { beats: [] }; s.payoff = ev.target.value; saveStory(c, s); };
+$("#story-add").onclick = () => {
+  const c = selClip();
+  const s = storyOf(c) || { beats: [], payoff: "" };
+  const at = Math.round(Math.min(Math.max(player.currentTime, c.start), c.end) * 100) / 100;
+  s.beats = [...(s.beats || []), { at, text: "" }];
+  saveStory(c, s);
+  renderStory();
+  const inputs = $$("#story-beats .txt");
+  inputs[(s.beats.sort((a, b) => a.at - b.at)).findIndex(b => b.at === at)]?.focus();
+};
+$("#story-suggest").onclick = async () => {
+  const c = selClip();
+  try {
+    const s = await api("/api/story/suggest", { video: c.video, clip: c.clip });
+    if (s.title) {
+      save({ caption: s.title, alt_caption: c.caption }, c);
+      $("#ed-caption").value = s.title;
+    }
+    saveStory(c, { beats: s.beats, payoff: s.payoff });
+    renderStory();
+  } catch (e) { report(e); }
+};
+$("#story-clear").onclick = () => { const c = selClip(); save({ story: "" }, c); renderStory(); renderPreview(); };
+
 function renderEditor() {
   const c = selClip();
   renderSaveState();
   renderPreview();
+  renderStory();
   $("#editor").style.visibility = c ? "visible" : "hidden";
   if (!c) return;
   $("#ed-title").textContent = c.label === "HIGHLIGHT" ? "Manual clip" : titleCase(c.label);

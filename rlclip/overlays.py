@@ -48,26 +48,28 @@ def _fit(draw, text, path, max_width, start_size, max_lines):
 
 
 def _draw_block(img, text, font_file, center_y, start_size, fill, max_lines=3, stroke_ratio=0.09,
-                max_width=0.88):
+                max_width=0.88, last_fill=None):
     draw = ImageDraw.Draw(img)
     width = img.width
     font, lines = _fit(draw, text, font_file, width * max_width, start_size, max_lines)
     stroke = max(3, int(font.size * stroke_ratio))
     line_h = int(font.size * 1.12)
     y = center_y - line_h * len(lines) / 2
-    for line in lines:
+    for i, line in enumerate(lines):
+        color = last_fill if last_fill and i == len(lines) - 1 and len(lines) > 1 else fill
         w = draw.textlength(line, font=font)
         x = (width - w) / 2
         # Soft drop shadow, then the outlined text.
         draw.text((x + 5, y + 7), line, font=font, fill=(0, 0, 0, 140), stroke_width=stroke,
                   stroke_fill=(0, 0, 0, 140))
-        draw.text((x, y), line, font=font, fill=fill, stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
+        draw.text((x, y), line, font=font, fill=color, stroke_width=stroke, stroke_fill=(0, 0, 0, 255))
         y += line_h
     return y   # bottom of the block, so other text can go underneath
 
 
-def caption_image(text, size, layout, font_file, watermark=""):
-    """Full-frame transparent PNG with the caption on top (and optional watermark)."""
+def caption_image(text, size, layout, font_file, watermark="", two_tone=False):
+    """Full-frame transparent PNG with the caption on top (and optional watermark). two_tone (story
+    titles): the last line is yellow, like "THE NET MADE ME / WORK FOR THIS ONE." """
     w, h = size
     img = Image.new("RGBA", size, (0, 0, 0, 0))
     # Vertical: Shorts/TikTok cover roughly the top 130px, the bottom 320-350px and ~120px on the
@@ -77,7 +79,8 @@ def caption_image(text, size, layout, font_file, watermark=""):
     else:
         center_y, start = int(h * 0.12), 72
     _draw_block(img, text.upper(), font_file, center_y, start, (255, 255, 255, 255),
-                max_width=0.78 if layout == "vertical" else 0.88)
+                max_width=0.78 if layout == "vertical" else 0.88,
+                last_fill=(255, 212, 0, 255) if two_tone else None, max_lines=2 if two_tone else 3)
     if watermark:
         draw = ImageDraw.Draw(img)
         font = _font(font_file, int(h * 0.024))
@@ -103,4 +106,21 @@ def label_image(label, size, layout, font_file, stat=""):
         size = 56 if layout == "vertical" else 48
         _draw_block(img, stat.upper(), font_file, int(bottom + size * 0.75), size, (255, 255, 255, 255),
                     max_lines=1)
+    return img
+
+
+# Story mode: under the gameplay (vertical: the game sits between ~29% and ~71% of the height).
+STORY_Y = {"vertical": {"beat": 0.75, "payoff": 0.77}, "horizontal": {"beat": 0.86, "payoff": 0.84}}
+
+
+def story_image(text, size, layout, font_file, kind="beat"):
+    """One story line: a beat (white, smaller) or the payoff (big, yellow)."""
+    w, h = size
+    img = Image.new("RGBA", size, (0, 0, 0, 0))
+    vertical = layout == "vertical"
+    big = kind == "payoff"
+    _draw_block(img, text.upper(), font_file, int(h * STORY_Y[layout][kind]),
+                (104 if vertical else 84) if big else (66 if vertical else 54),
+                (255, 212, 0, 255) if big else (255, 255, 255, 255), max_lines=2,
+                stroke_ratio=0.1 if big else 0.09, max_width=0.8 if vertical else 0.85)
     return img

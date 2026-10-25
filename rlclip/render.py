@@ -95,8 +95,10 @@ def _encoder_args(r):
     return ["-c:v", enc]
 
 
-def render(cfg, video, game, event_time, layout, caption, label, music, out_path, workdir, stat=""):
-    """music is None or (track_path, drop_time_seconds)."""
+def render(cfg, video, game, event_time, layout, caption, label, music, out_path, workdir, stat="", story=None):
+    """music is None or (track_path, drop_time_seconds). story: {"beats": [{"at": seconds into the
+    clip, "text": ...}], "payoff": ...}: lines under the gameplay that change as the play unfolds
+    (the caption becomes the title and the payoff replaces the stamp)."""
     r, a = cfg["render"], cfg["audio"]
     vinfo = ffmpeg.probe(video)
     duration = vinfo.duration
@@ -114,11 +116,37 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
     else:
         te_out, total = te, duration
 
+    def out_t(t):
+        """A time in the source clip -> the same moment in the output (slow motion stretches it)."""
+        if not slowmo or t <= s0:
+            return t
+        return s0 + (min(t, te) - s0) / speed + max(0.0, t - te)
+
+    story = story if story and (story.get("beats") or story.get("payoff")) else None
     font = overlays.font_path(cfg["captions"]["font"])
     cap_png = workdir / f"caption_{layout}.png"
-    overlays.caption_image(caption, (W, H), layout, font, cfg["captions"]["watermark"]).save(cap_png)
+    overlays.caption_image(caption, (W, H), layout, font, cfg["captions"]["watermark"],
+                           two_tone=bool(story)).save(cap_png)
+    # Story lines: (png, from, to) in output time. Each beat lasts until the next one; the payoff
+    # lands on the play and stays to the end.
+    lines = []
+    if story:
+        beats = sorted((b for b in story.get("beats") or [] if str(b.get("text", "")).strip()),
+                       key=lambda b: float(b["at"]))
+        payoff = str(story.get("payoff") or "").strip()
+        for i, b in enumerate(beats):
+            start = out_t(max(0.0, float(b["at"])))
+            end = out_t(float(beats[i + 1]["at"])) if i + 1 < len(beats) else (te_out if payoff else total)
+            if end - start > 0.05:
+                png = workdir / f"beat{i}_{layout}.png"
+                overlays.story_image(b["text"], (W, H), layout, font, "beat").save(png)
+                lines.append((png, start, end))
+        if payoff:
+            png = workdir / f"payoff_{layout}.png"
+            overlays.story_image(payoff, (W, H), layout, font, "payoff").save(png)
+            lines.append((png, te_out, total + 1))
     label_png = None
-    if cfg["captions"]["show_event_label"] and highlights.stamp_text(label):
+    if not story and cfg["captions"]["show_event_label"] and highlights.stamp_text(label):
         label_png = workdir / f"label_{layout}.png"
         overlays.label_image(highlights.STAMP_TEXT.get(label, label), (W, H), layout, font, stat).save(label_png)
 
@@ -141,6 +169,11 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
     if label_png:
         args += ["-loop", "1", "-framerate", str(fps), "-i", label_png]
         label_idx, n = n, n + 1
+    line_idx = []
+    for png, _, _ in lines:
+        args += ["-loop", "1", "-framerate", str(fps), "-i", png]
+        line_idx.append(n)
+        n += 1
 
     # ---- video
     if slowmo:
@@ -182,6 +215,10 @@ def render(cfg, video, game, event_time, layout, caption, label, music, out_path
                      f"fade=t=out:st={te_out + 1.6:.3f}:d=0.3:alpha=1[lab];"
                      f"[c1][lab]overlay=0:0:shortest=1[c2]")
         last = "c2"
+    for k, ((_, start, end), idx) in enumerate(zip(lines, line_idx)):
+        graph.append(f"[{idx}:v]format=rgba[s{k}];[{last}][s{k}]overlay=0:0:shortest=1:"
+                     f"enable='between(t,{start:.3f},{end:.3f})'[st{k}]")
+        last = f"st{k}"
     graph.append(f"[{last}]setsar=1,format=yuv420p[vout]")
 
     # ---- audio

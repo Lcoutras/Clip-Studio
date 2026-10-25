@@ -16,7 +16,7 @@ DETECTION_VERSION = 11
 VIDEO_EXT = {".mp4", ".mkv", ".mov", ".flv", ".ts", ".avi", ".webm"}
 CSV_FIELDS = ["clip", "label", "category", "score", "start", "end", "anchor", "tone", "caption",
               "alt_caption", "music", "skip", "reason", "source", "game_volume", "music_volume",
-              "framing", "crop_x", "stat", "flag", "note", "reject_reason", "agent", "agent_note", "exports"]
+              "framing", "crop_x", "stat", "flag", "note", "reject_reason", "agent", "agent_note", "exports", "story"]
 
 # Finished clips go to output/Exports/<date of export>/; Clip Studio's own working files (analysis,
 # captions sheet, raw cuts) go to output/Analysis/<recording>/.
@@ -148,6 +148,23 @@ def join_clips(parts, out, fps):
 
 def feedback_path(cfg):
     return config.resolve(cfg["output_dir"]) / "feedback.json"
+
+
+def story_of(row, start=None):
+    """The clip's story ({"beats": [{"at": seconds into the recording, "text"}], "payoff"}), with beat
+    times made relative to the clip's start when start is given. None when it has none."""
+    try:
+        story = json.loads(row.get("story") or "null")
+    except ValueError:
+        return None
+    if not isinstance(story, dict):
+        return None
+    beats = [b for b in story.get("beats") or [] if isinstance(b, dict) and str(b.get("text", "")).strip()]
+    if start is not None:
+        beats = [{**b, "at": float(b["at"]) - float(start)} for b in beats]
+    if not beats and not str(story.get("payoff") or "").strip():
+        return None
+    return {"beats": beats, "payoff": str(story.get("payoff") or "")}
 
 
 def is_skipped(row):
@@ -594,7 +611,7 @@ class Project:
                 out = today / f"{self.export_name(row, layout, formats)}.mp4"
                 previous = self.exported(row, layout)
                 render.render(cfg, video, game, anchor - start, layout, row["caption"], row["label"],
-                              song, out, work, stat=row.get("stat") or "")
+                              song, out, work, stat=row.get("stat") or "", story=story_of(row, start))
                 fields = post_fields(row, self.video)
                 out.with_suffix(".txt").write_text(fields["description"] + "\n", encoding="utf-8")
                 out.with_suffix(".json").write_text(json.dumps(

@@ -1,0 +1,41 @@
+# Story mode lines (Clip Studio's "Suggest story"). Beats are short (2-5 words), uppercase on screen.
+# Add your own in captions/my_story.yaml with the same layout: updates never touch that file.
+
+openers:          # first beat, when the clip starts before anything happens
+  Goal: ["Kickoff chaos...", "Here we go...", "Nothing to see here..."]
+  Assist: ["Reading the play...", "Here we go..."]
+  Save: ["They had a free shot...", "Uh oh..."]
+  Epic Save: ["They had a free shot...", "Open net incoming..."]
+  Blooper/Fail: ["What could go wrong...", "Confidence: high..."]
+  any: ["Here we go...", "Watch this..."]
+
+events:           # a beat for each thing the game shows during the build-up
+  SHOT: ["First shot...", "Shot... saved?", "Tried it..."]
+  POST: ["POST.", "CROSSBAR.", "Off the bar..."]
+  AERIAL HIT: ["Up we go...", "Took flight...", "Air time..."]
+  BICYCLE HIT: ["Bicycle?!", "Wrong gear. Right idea."]
+  CENTER: ["Center it...", "Pass..."]
+  CLEAR: ["Cleared it...", "Not yet..."]
+  DEMO: ["Bumped him first.", "Cleared the path."]
+  SAVE: ["Saved it...", "Not today..."]
+  EPIC SAVE: ["How did that stay out?!", "Not today..."]
+  hit: ["Kept it alive...", "One more touch...", "Again...", "Got a second chance...", "Wrong gear. Right idea."]
+
+payoffs:          # big yellow line from the play to the end
+  Goal: ["And it's in.", "Called it.", "Too easy."]
+  Goal after post: ["Took the scenic route.", "Third time's the charm."]
+  Aerial: ["From the sky.", "Gravity who?"]
+  Save: ["Not today.", "Denied."]
+  Epic Save: ["Not today.", "Denied."]
+  Assist: ["Special delivery.", "Teamwork."]
+  Demo: ["See you at spawn.", "Gone."]
+  Post: ["So close.", "Inches."]
+  Clear: ["Not in my house.", "Cleared."]
+  Center: ["Served."]
+  Blooper/Fail: ["Well... that happened.", "We don't talk about this."]
+  any: ["That's the clip."]
+
+titles:           # the title (top line) for a pattern; otherwise the clip keeps its caption
+  Goal after post: ["The net made me work for this one."]
+  Aerial: ["Gravity was optional today."]
+  Epic Save: ["They really thought they had it."]
