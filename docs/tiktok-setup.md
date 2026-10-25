@@ -1,6 +1,6 @@
 # Upload exports to TikTok automatically (private app)
 
-**TikTok Uploader.bat** checks `output\Exports\` once a day and sends each new vertical clip to your TikTok **as a draft**, with its description and hashtags. You open the TikTok notification and tap **Post**, and you can add a trending sound first. It remembers what it sent, so nothing goes twice.
+**TikTok Uploader.bat** checks `output\Exports\` every 3 hours and sends up to 5 each new vertical clip to your TikTok **as a draft**, with its description and hashtags. You open the TikTok notification and tap **Post**, and you can add a trending sound first. It remembers what it sent, so nothing goes twice.
 
 It uses your own **private** TikTok developer app:
 - It's never submitted for review and never published.
@@ -31,14 +31,15 @@ tiktok:
   client_key: "sandbox client key"
   client_secret: "sandbox client secret"
 ```
-The defaults: drafts, checks once a day, at most 5 clips a day. To change them, add `watch_minutes:` (e.g. `60` for hourly) or `max_per_day:`.
+The defaults: drafts, a check every 3 hours, up to 5 clips per check. To change them, add `watch_minutes:` (e.g. `60` for hourly), `max_per_run:`, or a daily cap with `max_per_day:` (recommended if you ever switch to direct posting).
 
 ## 4. Run it
-Double-click **TikTok Uploader.bat**. The first time, your browser opens TikTok: sign in and allow access. It sends anything new right away, then checks once a day. Leave the window open; close it to stop.
+Double-click **TikTok Uploader.bat**. The first time, your browser opens TikTok: sign in and allow access. It sends up to 5 new clips right away, then checks again every 3 hours. Leave the window open; close it to stop.
 
 To start it with Windows: press Win+R, type `shell:startup`, and put a shortcut to **TikTok Uploader.bat** in that folder.
 
 ## What gets uploaded
+- Uploads land in your TikTok inbox as drafts; finished, they're regular **posts** (they stay on your profile and go to the For You page). TikTok's upload API can't post to Stories. If the app offers "share to story" when you finish a draft, you can tick it there.
 - Every vertical clip in `output\Exports\<date>\`. Highlight compilations and `[horizontal]` versions are skipped.
 - The description and hashtags from the clip's `.json` / `.txt`, written by Clip Studio when you export.
 - **Once a clip is sent, it moves out of `Exports` into `output\Uploaded\<date>\`** (with its `.txt` and `.json`), so `Exports` only ever holds clips still waiting. Clip Studio knows where it went: **Watch export** still works.

@@ -45,7 +45,7 @@ def settings(cfg):
     if not t.get("client_key") or not t.get("client_secret"):
         raise TikTokError("Add your TikTok app's client_key and client_secret to settings.yaml first "
                           "(see docs/tiktok-setup.md).")
-    return {"mode": "drafts", "privacy": "PUBLIC_TO_EVERYONE", "max_per_day": 5, "watch_minutes": 1440,
+    return {"mode": "drafts", "privacy": "PUBLIC_TO_EVERYONE", "max_per_run": 5, "max_per_day": None, "watch_minutes": 180,
             "redirect_uri": DEFAULT_REDIRECT, "extra_tags": ["#fyp"], **t}
 
 
@@ -281,7 +281,9 @@ def upload_new(cfg, limit=None, say=print):
     log = load_log(cfg)
     today = time.strftime("%Y-%m-%d")
     sent_today = sum(1 for v in log.values() if v.get("at", "").startswith(today))
-    room = max(0, int(s["max_per_day"]) - sent_today)
+    room = int(s["max_per_run"]) if s.get("max_per_run") else 10 ** 6   # per check (every watch_minutes)
+    if s.get("max_per_day"):
+        room = min(room, max(0, int(s["max_per_day"]) - sent_today))
     if limit is not None:
         room = min(room, limit)
     root = config.resolve(cfg["output_dir"]) / pipeline.EXPORTS
@@ -330,7 +332,7 @@ def upload_new(cfg, limit=None, say=print):
             else "  posted (it can take a few minutes to show on your profile)")
     left = len(todo) - sent
     if left:
-        say(f"{left} more waiting (daily limit {s['max_per_day']}).")
+        say(f"{left} more waiting for the next check.")
     return sent
 
 
@@ -338,7 +340,8 @@ def watch(cfg, say=print):
     s = settings(cfg)
     every = float(s["watch_minutes"])
     say(f"Watching {config.resolve(cfg['output_dir']) / pipeline.EXPORTS} "
-        f"{'once a day' if every == 1440 else f'every {every:g} minutes'}. Close this window to stop.")
+        f"{'once a day' if every == 1440 else f'every {every / 60:g} hours' if every % 60 == 0 else f'every {every:g} minutes'}"
+        f", up to {s['max_per_run']} clips each time. Close this window to stop.")
     while True:
         try:
             upload_new(cfg, say=say)
