@@ -1,6 +1,6 @@
 # Upload exports to TikTok automatically (private app)
 
-**TikTok Uploader.bat** checks `output\Exports\` every 3 hours and sends every new vertical clip to your TikTok **as a draft**, with its description and hashtags. You open the TikTok notification and tap **Post**, and you can add a trending sound first. It remembers what it sent, so nothing goes twice.
+**TikTok Uploader.bat** checks `output\Exports\` every 3 hours and sends every new vertical clip to your TikTok **as a draft**. You open the TikTok notification, paste the description and hashtags, and tap **Post**. You can add a trending sound first. It remembers what it sent, so nothing goes twice.
 
 It uses your own **private** TikTok developer app:
 - It's never submitted for review and never published.
@@ -41,7 +41,8 @@ To start it with Windows: press Win+R, type `shell:startup`, and put a shortcut 
 ## What gets uploaded
 - Uploads land in your TikTok inbox as drafts; finished, they're regular **posts** (they stay on your profile and go to the For You page). TikTok's upload API can't post to Stories. If the app offers "share to story" when you finish a draft, you can tick it there.
 - Every vertical clip in `output\Exports\<date>\`. Highlight compilations and `[horizontal]` versions are skipped.
-- The description and hashtags from the clip's `.json` / `.txt`, written by Clip Studio when you export.
+- **Drafts arrive without a description.** TikTok's draft upload doesn't accept text, so the editor only shows `#RLClipStudio`, the tag TikTok adds to anything an app uploads. Clip Studio writes the description and hashtags to the clip's `.txt` (next to it in `output\Uploaded\<date>\`) and to `posts.csv`. Copy them in from there. Drafts reach TikTok in the order they were sent.
+- Only `mode: direct` sends the description with the video. For a private app that's never been reviewed, TikTok only allows those posts as **private** (Only me), so drafts are the better choice.
 - **Once a clip is sent, it moves out of `Exports` into `output\Uploaded\<date>\`** (with its `.txt` and `.json`), so `Exports` only ever holds clips still waiting. Clip Studio knows where it went: **Watch export** still works.
 - A play is never sent twice. If you export the same clip again (say with a new caption), the uploader skips it and says so.
 - What was sent and when is listed in `output\tiktok\uploaded.json`. To send a clip again, delete its line there and move its files back into `Exports`.
