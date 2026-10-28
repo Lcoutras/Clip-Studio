@@ -266,3 +266,10 @@ def test_fast_mode_rechecks_loud_moments_it_missed():
     assert [e.label for e in found] == ["GOAL"] and all(at > 14.8 for at in looked[:3])
     already = [detect.Event(15.0, "GOAL", 7, "hype", "ocr")]
     assert detect.recheck_loud_moments(info, det, [(14.8, 22.0)], already, read=read) == []
+
+
+def test_caption_drops_emoji_the_font_cannot_draw():
+    from rlclip import overlays
+    assert overlays.drawable("I FINISHED THE DRIVE. 🏁") == "I FINISHED THE DRIVE."
+    assert overlays.drawable("Clutch ❤️ save 👨‍👩‍👧 ok!") == "Clutch save ok!"
+    assert overlays.drawable("100% — #1 & 50/50?") == "100% — #1 & 50/50?"

@@ -1,6 +1,7 @@
 """Draws caption / label / watermark images with Pillow (they get overlaid by ffmpeg)."""
 
 import textwrap
+import unicodedata
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -47,10 +48,18 @@ def _fit(draw, text, path, max_width, start_size, max_lines):
     return font, textwrap.wrap(text, width=18)[:max_lines]
 
 
+def drawable(text):
+    """Drops emoji and symbols: caption fonts like Impact have no glyphs for them (they'd show as boxes)."""
+    kept = "".join(c for c in text if unicodedata.category(c) not in ("So", "Cs", "Co", "Cn")
+                   and c not in "\u200d\ufe0e\ufe0f")
+    return " ".join(kept.split())
+
+
 def _draw_block(img, text, font_file, center_y, start_size, fill, max_lines=3, stroke_ratio=0.09,
                 max_width=0.88, last_fill=None):
     draw = ImageDraw.Draw(img)
     width = img.width
+    text = drawable(text)
     font, lines = _fit(draw, text, font_file, width * max_width, start_size, max_lines)
     stroke = max(3, int(font.size * stroke_ratio))
     line_h = int(font.size * 1.12)
